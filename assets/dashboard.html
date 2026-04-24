@@ -611,6 +611,38 @@ td{
   .instruments{grid-template-columns:repeat(2,1fr)}
   .drawer{width:100%}
 }
+
+/* ── Scan progress bar ───────────────────────────────────────────────────────── */
+.scan-progress{
+  position:absolute;bottom:0;left:0;right:0;height:2px;
+  background:transparent;overflow:hidden;pointer-events:none;
+  opacity:0;transition:opacity .2s;
+}
+.scan-progress.active{opacity:1}
+.scan-progress-bar{
+  height:100%;width:0%;
+  background:linear-gradient(90deg,var(--navy-900),var(--rw-green),var(--navy-900));
+  background-size:200% 100%;
+  transition:width .4s ease;
+  animation:scanShimmer 1.2s linear infinite;
+}
+@keyframes scanShimmer{to{background-position:-200% 0}}
+
+/* ── Patched status ──────────────────────────────────────────────────────────── */
+.edge-patched{background:var(--rw-green)}
+.sb-patched{color:var(--rw-green);border-color:rgba(45,143,90,.4);background:rgba(45,143,90,.08)}
+.sb-patched .sb-dot{background:var(--rw-green)}
+.gauge.clear .g-value{color:var(--rw-green)}
+.rz-badge{
+  display:inline-flex;align-items:center;gap:3px;
+  font-size:9px;font-weight:800;letter-spacing:.1em;
+  background:var(--navy-900);color:var(--paper);
+  border-radius:1px;padding:1px 5px;margin-left:6px;vertical-align:middle;
+}
+
+/* ── CVE chip as link ────────────────────────────────────────────────────────── */
+a.cve-chip{text-decoration:none;cursor:pointer}
+a.cve-chip:hover{filter:brightness(1.15);text-decoration:underline}
   </style>
 </head>
 <body>
@@ -624,13 +656,14 @@ td{
   <div class="header-sep"></div>
   <span class="header-route">SBOM · COMPLIANCE · OPS</span>
   <div class="header-right">
-    <div class="scan-badge">
+    <div class="scan-badge" id="scanBadge">
       <div class="pulse-dot"></div>
-      Live · Last scan 2 min ago
+      <span id="scanLabel">Live · Last scan 2 min ago</span>
     </div>
-    <button class="btn-hdr btn-rescan" onclick="triggerScan()">↻ Re-scan</button>
-    <button class="btn-hdr btn-remediate" onclick="showToast('⚡ RunwayZero pipeline triggered')">⚡ Auto-remediate All</button>
+    <button class="btn-hdr btn-rescan" id="btnRescan" onclick="triggerScan()">↻ Re-scan</button>
+    <button class="btn-hdr btn-remediate" onclick="triggerRemediateAll()">⚡ Auto-remediate All</button>
   </div>
+  <div class="scan-progress" id="scanProgress"><div class="scan-progress-bar" id="scanProgressBar"></div></div>
 </header>
 
 <!-- ── MAIN ── -->
@@ -740,7 +773,7 @@ td{
 // ── Data ───────────────────────────────────────────────────────────────────────
 const PKGS = [
   { id:1, name:'lmdeploy',     type:'Python', eco:'pip',    current:'0.12.2', rec:'0.12.3', latest:'0.12.3', status:'vulnerable',
-    cves:[{id:'CVE-2026-33626',sev:'critical',desc:'SSRF via unvalidated image_url in the VL decode() function allows server-side requests to internal endpoints including AWS IMDS, leaking IAM credentials.'}],
+    cves:[{id:'CVE-2026-33626',sev:'critical',url:'https://nvd.nist.gov/vuln/detail/CVE-2026-33626',desc:'SSRF via unvalidated image_url in the VL decode() function allows server-side requests to internal endpoints including AWS IMDS, leaking IAM credentials.'}],
     usedIn:[{file:'app.py',line:12,code:'from lmdeploy.vl import decode'},{file:'app.py',line:47,code:'result = decode(image_url=url)'}],
     license:'Apache-2.0', fixBranch:'runwayzero/cve-2026-33626' },
   { id:2, name:'fastapi',      type:'Python', eco:'pip',    current:'0.115.0',rec:'0.115.0',latest:'0.115.0',status:'compliant',
@@ -753,18 +786,18 @@ const PKGS = [
     cves:[], usedIn:[{file:'app.py',line:2,code:'import uvicorn'}],
     license:'BSD-3-Clause', fixBranch:null },
   { id:5, name:'requests',     type:'Python', eco:'pip',    current:'2.31.0', rec:'2.32.3', latest:'2.32.3', status:'vulnerable',
-    cves:[{id:'CVE-2024-35195',sev:'medium',desc:'Proxy-Authorization header leak when following redirects across hosts.'}],
+    cves:[{id:'CVE-2024-35195',sev:'medium',url:'https://nvd.nist.gov/vuln/detail/CVE-2024-35195',desc:'Proxy-Authorization header leak when following redirects across hosts.'}],
     usedIn:[{file:'tools/genspark.py',line:8,code:'import requests'},{file:'tools/verify.py',line:4,code:'import requests'}],
     license:'Apache-2.0', fixBranch:null },
   { id:6, name:'cryptography', type:'Python', eco:'pip',    current:'41.0.3', rec:'43.0.1', latest:'43.0.1', status:'vulnerable',
-    cves:[{id:'CVE-2024-26130',sev:'high',desc:'NULL pointer dereference in PKCS12 key parsing can cause a segfault when processing maliciously crafted PKCS#12 files.'},{id:'CVE-2023-49083',sev:'medium',desc:'NULL pointer dereference when loading certificates with certain malformed data.'}],
+    cves:[{id:'CVE-2024-26130',sev:'high',url:'https://nvd.nist.gov/vuln/detail/CVE-2024-26130',desc:'NULL pointer dereference in PKCS12 key parsing can cause a segfault when processing maliciously crafted PKCS#12 files.'},{id:'CVE-2023-49083',sev:'medium',url:'https://nvd.nist.gov/vuln/detail/CVE-2023-49083',desc:'NULL pointer dereference when loading certificates with certain malformed data.'}],
     usedIn:[{file:'auth.py',line:5,code:'from cryptography.hazmat.primitives import hashes'}],
     license:'Apache-2.0', fixBranch:null },
   { id:7, name:'boto3',        type:'Python', eco:'pip',    current:'1.34.0', rec:'1.35.42',latest:'1.35.42',status:'outdated',
     cves:[], usedIn:[{file:'tools/ssm.py',line:4,code:'import boto3'},{file:'tools/codecommit.py',line:4,code:'import boto3'}],
     license:'Apache-2.0', fixBranch:null },
   { id:8, name:'pillow',       type:'Python', eco:'pip',    current:'10.3.0', rec:'10.4.0', latest:'10.4.0', status:'vulnerable',
-    cves:[{id:'CVE-2024-28219',sev:'high',desc:'Buffer overflow in _imagingcms.c via a crafted file, allowing potential arbitrary code execution.'}],
+    cves:[{id:'CVE-2024-28219',sev:'high',url:'https://nvd.nist.gov/vuln/detail/CVE-2024-28219',desc:'Buffer overflow in _imagingcms.c via a crafted file, allowing potential arbitrary code execution.'}],
     usedIn:[{file:'utils/image_proc.py',line:2,code:'from PIL import Image'}],
     license:'HPND', fixBranch:null },
   { id:9, name:'starlette',    type:'Python', eco:'pip',    current:'0.41.0', rec:'0.41.0', latest:'0.41.3', status:'compliant',
@@ -774,18 +807,18 @@ const PKGS = [
     cves:[], usedIn:[{file:'config.py',line:2,code:'import yaml'}],
     license:'MIT', fixBranch:null },
   { id:11,name:'openssl',      type:'Binary', eco:'system', current:'3.0.2',  rec:'3.0.15', latest:'3.3.2',  status:'vulnerable',
-    cves:[{id:'CVE-2024-5535',sev:'critical',desc:'SSL_select_next_proto buffer overread — crash or data exposure when NPN is misconfigured.'},{id:'CVE-2024-4741',sev:'high',desc:'Use-after-free when freeing X.509 names.'}],
+    cves:[{id:'CVE-2024-5535',sev:'critical',url:'https://nvd.nist.gov/vuln/detail/CVE-2024-5535',desc:'SSL_select_next_proto buffer overread — crash or data exposure when NPN is misconfigured.'},{id:'CVE-2024-4741',sev:'high',url:'https://nvd.nist.gov/vuln/detail/CVE-2024-4741',desc:'Use-after-free when freeing X.509 names.'}],
     usedIn:[{file:'/usr/lib/x86_64-linux-gnu/libssl.so.3',line:null,code:'System library'}],
     license:'Apache-2.0', fixBranch:null },
   { id:12,name:'libcurl',      type:'Binary', eco:'system', current:'7.81.0', rec:'7.88.1', latest:'8.10.1', status:'vulnerable',
-    cves:[{id:'CVE-2024-2398',sev:'high',desc:'HTTP/2 push headers memory leak allows crash via specially crafted responses.'}],
+    cves:[{id:'CVE-2024-2398',sev:'high',url:'https://nvd.nist.gov/vuln/detail/CVE-2024-2398',desc:'HTTP/2 push headers memory leak allows crash via specially crafted responses.'}],
     usedIn:[{file:'/usr/lib/x86_64-linux-gnu/libcurl.so.4',line:null,code:'System library'}],
     license:'curl', fixBranch:null },
   { id:13,name:'numpy',        type:'Python', eco:'pip',    current:'1.26.4', rec:'1.26.4', latest:'2.1.2',  status:'outdated',
     cves:[], usedIn:[{file:'utils/image_proc.py',line:1,code:'import numpy as np'}],
     license:'BSD-3-Clause', fixBranch:null },
   { id:14,name:'setuptools',   type:'Python', eco:'pip',    current:'68.2.2', rec:'75.2.0', latest:'75.2.0', status:'vulnerable',
-    cves:[{id:'CVE-2024-6345',sev:'high',desc:'Remote code execution via malicious package URL in the package_index module.'}],
+    cves:[{id:'CVE-2024-6345',sev:'high',url:'https://nvd.nist.gov/vuln/detail/CVE-2024-6345',desc:'Remote code execution via malicious package URL in the package_index module.'}],
     usedIn:[{file:'requirements.txt',line:null,code:'Transitive dependency'}],
     license:'MIT', fixBranch:null },
 ];
@@ -802,8 +835,8 @@ function renderInstruments(){
   const total=PKGS.length,
         vuln =PKGS.filter(p=>p.status==='vulnerable').length,
         out  =PKGS.filter(p=>p.status==='outdated').length,
-        cmp  =PKGS.filter(p=>p.status==='compliant').length,
-        crit =PKGS.flatMap(p=>p.cves).filter(c=>c.sev==='critical').length;
+        cmp  =PKGS.filter(p=>p.status==='compliant'||p.status==='patched').length,
+        crit =PKGS.filter(p=>p.status==='vulnerable').flatMap(p=>p.cves).filter(c=>c.sev==='critical').length;
   const pct=n=>Math.round(n/total*100);
   document.getElementById('instruments').innerHTML=`
     <div class="gauge total">
@@ -859,10 +892,10 @@ function renderTable(){
   document.getElementById('emptyState').style.display=rows.length?'none':'';
   if(!rows.length){tbody.innerHTML='';return}
   tbody.innerHTML=rows.map(p=>{
-    const edgeCls=`edge-${p.status==='vulnerable'?'vuln':p.status==='outdated'?'outdated':p.status==='compliant'?'compliant':'unknown'}`;
+    const edgeCls=`edge-${p.status==='vulnerable'?'vuln':p.status==='outdated'?'outdated':p.status==='patched'?'patched':p.status==='compliant'?'compliant':'unknown'}`;
     const vCls=p.status==='outdated'||p.status==='vulnerable'?'td-behind':'td-current';
     const cveHtml=p.cves.length
-      ?p.cves.map(c=>`<span class="cve-chip sev-${c.sev}">${c.id}<span class="sev-pip pip-${c.sev}">${c.sev.toUpperCase()}</span></span>`).join('')
+      ?p.cves.map(c=>`<a class="cve-chip sev-${c.sev}" href="${c.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${c.id}<span class="sev-pip pip-${c.sev}">${c.sev.toUpperCase()}</span></a>`).join('')
       :`<span class="no-cve">—</span>`;
     const files=[...new Set(p.usedIn.map(u=>u.file))];
     const usedHtml=`<span class="used-cell">${files.slice(0,2).join(', ')}${files.length>2?` +${files.length-2}`:''}</span>`;
@@ -870,7 +903,7 @@ function renderTable(){
       ?`<div class="act-wrap"><button class="btn-fix" onclick="triggerFix(event,${p.id})">⚡ Fix</button><button class="btn-det" onclick="openDrawer(event,${p.id})">Details</button></div>`
       :`<div class="act-wrap"><button class="btn-det" onclick="openDrawer(event,${p.id})">Details</button></div>`;
     const typeCls=p.type==='Binary'?'type-binary':'type-python';
-    const sbCls=p.status==='vulnerable'?'sb-vuln':p.status==='outdated'?'sb-outdated':'sb-compliant';
+    const sbCls=p.status==='vulnerable'?'sb-vuln':p.status==='outdated'?'sb-outdated':p.status==='patched'?'sb-patched':'sb-compliant';
     return `<tr id="row-${p.id}" onclick="openDrawer(event,${p.id})" class="${selectedId===p.id?'row-selected':''}">
       <td class="edge-cell ${edgeCls}"></td>
       <td><div class="td-pkg">${p.name}</div><div class="td-pkg-sub">${p.eco} · ${p.license}</div></td>
@@ -878,7 +911,7 @@ function renderTable(){
       <td class="td-mono ${vCls}">${p.current}</td>
       <td class="td-mono td-rec">${p.rec}</td>
       <td class="td-mono td-latest">${p.latest}</td>
-      <td><span class="status-badge ${sbCls}"><span class="sb-dot"></span>${p.status.toUpperCase()}</span></td>
+      <td><span class="status-badge ${sbCls}"><span class="sb-dot"></span>${p.status==='patched'?'PATCHED ✓':p.status.toUpperCase()}</span>${p.patchedBy?`<span class="rz-badge">RZ</span>`:''}</td>
       <td>${cveHtml}</td>
       <td>${usedHtml}</td>
       <td onclick="event.stopPropagation()">${actHtml}</td>
@@ -924,7 +957,7 @@ function openDrawer(e,id){
   if(p.cves.length){
     cveSection=`<div class="bp-section"><div class="bp-section-title">Known CVEs · ${p.cves.length}</div>
       ${p.cves.map(c=>`<div class="cve-card">
-        <div class="cve-card-id">${c.id} <span class="sev-pip pip-${c.sev}">${c.sev.toUpperCase()}</span></div>
+        <div class="cve-card-id"><a href="${c.url}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${c.id} ↗</a> <span class="sev-pip pip-${c.sev}">${c.sev.toUpperCase()}</span></div>
         <div class="cve-card-desc">${c.desc}</div>
       </div>`).join('')}
     </div>`;
@@ -946,10 +979,11 @@ function openDrawer(e,id){
       </div>
     </div>
     ${cveSection}${usageSection}`;
+  const cveUrl = p.cves.length ? p.cves[0].url : null;
   const actHtml=p.status==='vulnerable'
     ?`<div class="bp-action-row">
         <button class="btn-bp-primary" onclick="triggerFix(null,${p.id})">⚡ Auto-remediate with RunwayZero</button>
-        <button class="btn-bp-ghost" onclick="showToast('Opening CVE advisory…')">↗ CVE</button>
+        ${cveUrl?`<a class="btn-bp-ghost" href="${cveUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">↗ CVE</a>`:`<button class="btn-bp-ghost" disabled style="opacity:.4;cursor:not-allowed">↗ CVE</button>`}
       </div>`
     :p.status==='outdated'
     ?`<div class="bp-action-row"><button class="btn-bp-primary" onclick="showToast('Upgrade scheduled')">↑ Schedule Upgrade</button></div>`
@@ -965,11 +999,98 @@ function closeDrawer(){
 }
 
 // ── Actions ────────────────────────────────────────────────────────────────────
-function triggerFix(e,id){
-  e&&e.stopPropagation();
-  showToast(`⚡ RunwayZero pipeline triggered · ${PKGS.find(x=>x.id===id).name}`);
+// ── Scan state ────────────────────────────────────────────────────────────────
+// 0 = initial (vulnerable packages present)
+// 1 = post-remediation (all patched by RunwayZero)
+let scanState = 0;
+const ORIGINAL_STATUS = {};
+PKGS.forEach(p => { ORIGINAL_STATUS[p.id] = { status: p.status, current: p.current }; });
+
+const SCAN_STEPS = [
+  { pct: 15, msg: '↻ Querying Genspark threat intel…' },
+  { pct: 35, msg: '↻ Scanning SSM inventory…' },
+  { pct: 55, msg: '↻ Scanning CodeCommit for import usage…' },
+  { pct: 72, msg: '↻ Assessing impact across services…' },
+  { pct: 88, msg: '↻ Verifying patch availability…' },
+  { pct: 100, msg: '✓ Scan complete' },
+];
+
+function triggerScan() {
+  const btn = document.getElementById('btnRescan');
+  btn.disabled = true;
+  btn.textContent = '↻ Scanning…';
+  const prog = document.getElementById('scanProgress');
+  const bar  = document.getElementById('scanProgressBar');
+  const label = document.getElementById('scanLabel');
+  prog.classList.add('active');
+  bar.style.width = '0%';
+
+  let stepIdx = 0;
+  function runStep() {
+    if (stepIdx >= SCAN_STEPS.length) {
+      // Scan complete — patch all vulnerable packages
+      setTimeout(() => {
+        if (scanState === 0) {
+          // Mark all vulnerable packages as patched
+          PKGS.forEach(p => {
+            if (p.status === 'vulnerable') {
+              p.status  = 'patched';
+              p.current = p.rec;
+              p.patchedBy = 'RunwayZero';
+            }
+          });
+          scanState = 1;
+          label.textContent = 'Live · All vulnerabilities patched';
+          showToast('✓ Scan complete — all vulnerabilities patched by RunwayZero');
+        } else {
+          // Reset back to original state
+          PKGS.forEach(p => {
+            if (ORIGINAL_STATUS[p.id]) {
+              p.status  = ORIGINAL_STATUS[p.id].status;
+              p.current = ORIGINAL_STATUS[p.id].current;
+              p.patchedBy = null;
+            }
+          });
+          scanState = 0;
+          label.textContent = 'Live · Last scan just now';
+          showToast('↻ State reset — showing pre-remediation snapshot');
+        }
+        prog.classList.remove('active');
+        bar.style.width = '0%';
+        btn.disabled = false;
+        btn.textContent = scanState === 1 ? '↺ Reset' : '↻ Re-scan';
+        renderInstruments();
+        renderTable();
+      }, 400);
+      return;
+    }
+    const step = SCAN_STEPS[stepIdx++];
+    bar.style.width = step.pct + '%';
+    showToast(step.msg);
+    setTimeout(runStep, stepIdx === SCAN_STEPS.length ? 600 : 700);
+  }
+  runStep();
 }
-function triggerScan(){showToast('↻ Scanning CodeCommit + SSM inventory…')}
+
+function triggerFix(e, id) {
+  e && e.stopPropagation();
+  const p = PKGS.find(x => x.id === id);
+  if (!p) return;
+  showToast(`⚡ RunwayZero pipeline triggered · ${p.name}`);
+  setTimeout(() => {
+    p.status    = 'patched';
+    p.current   = p.rec;
+    p.patchedBy = 'RunwayZero';
+    renderInstruments();
+    renderTable();
+    showToast(`✓ ${p.name} patched → ${p.rec}`);
+  }, 1800);
+}
+
+function triggerRemediateAll() {
+  showToast('⚡ RunwayZero pipeline triggered for all vulnerabilities…');
+  setTimeout(() => triggerScan(), 400);
+}
 function exportCSV(){
   const rows=getFiltered();
   const csv=['Package,Type,Current,Recommended,Latest,Status,CVEs']
