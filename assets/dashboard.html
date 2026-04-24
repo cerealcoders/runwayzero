@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RunwayZero — SBOM Compliance</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+/* ── Tokens ─────────────────────────────────────────────────────────────────── */
+:root {
+  /* navy */
+  --navy-900: #00205B;
+  --navy-700: #1a3460;
+  --navy-600: #3a5a88;
+  --navy-500: #4a72a8;
+  --navy-400: #5a7aa0;
+  --navy-300: #9fb4cf;
+  --navy-200: #c0cfe0;
+  /* paper */
+  --paper:        #fdfaee;
+  --paper-cream:  #f5f2e8;
+  --paper-stroke: #c8bfa0;
+  /* runway semantics */
+  --rw-gold:   #c89000;   /* darkened for legibility on cream */
+  --rw-amber:  #f0d05a;
+  --rw-orange: #c94e20;   /* slightly darkened for cream bg */
+  --rw-green:  #2d8f5a;   /* slightly darkened for cream bg */
+  /* light aviation — replaces cockpit dark */
+  --ck-dark:  #ede9df;    /* was #070d18 — panel/gauge bg */
+  --ck-mid:   #e8e4d8;    /* was #0d1726 — page bg */
+  --ck-storm: #e2ddd1;    /* was #0b0f1a — panel head / table head */
+  /* data (no glow on light bg) */
+  --data:      #00205B;
+  --data-dim:  #1a3460;
+  --data-cyan: #00205B;
+  /* layout */
+  --border: rgba(0,32,91,.13);
+  --border-bright: rgba(0,32,91,.28);
+  --perf: rgba(194,184,142,.55);   /* perforation */
+}
+/* ── Reset ───────────────────────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:'JetBrains Mono',monospace;
+  background:var(--ck-mid);
+  color:var(--navy-900);
+  min-height:100vh;
+  font-size:14px;
+  line-height:1.6;
+  overflow-x:hidden;
+}
+
+/* ── Aviation grid underlay ─────────────────────────────────────────────────── */
+body::before{
+  content:'';
+  position:fixed;inset:0;
+  pointer-events:none;
+  z-index:0;
+  background-image:
+    linear-gradient(rgba(0,32,91,.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,32,91,.07) 1px, transparent 1px);
+  background-size:48px 48px;
+}
+/* coastline curve accent */
+body::after{
+  content:'';
+  position:fixed;
+  right:-120px;bottom:-80px;
+  width:600px;height:400px;
+  border:1px solid rgba(0,32,91,.08);
+  border-radius:60% 40% 55% 45% / 50% 60% 40% 50%;
+  pointer-events:none;z-index:0;
+  animation:driftSlow 30s ease-in-out infinite alternate;
+}
+@keyframes driftSlow{to{transform:rotate(6deg) scale(1.04)}}
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--paper-cream)}
+::-webkit-scrollbar-thumb{background:var(--navy-300);border-radius:3px}
+
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+header{
+  position:sticky;top:0;z-index:100;
+  background:var(--paper);
+  border-bottom:1px solid var(--border);
+  height:56px;
+  display:flex;align-items:center;
+  padding:0 28px;gap:16px;
+}
+.logo-wrap{display:flex;align-items:center;gap:10px}
+.logo-mark{
+  width:32px;height:32px;
+  background:var(--navy-900);
+  border:1px solid var(--navy-700);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;letter-spacing:.05em;
+  color:var(--paper);
+  clip-path:polygon(12% 0%,88% 0%,100% 12%,100% 88%,88% 100%,12% 100%,0% 88%,0% 12%);
+}
+.logo-text{
+  font-size:14px;font-weight:700;
+  letter-spacing:.15em;text-transform:uppercase;
+  color:var(--navy-900);
+}
+.header-sep{
+  width:1px;height:24px;
+  background:var(--border);margin:0 4px;
+}
+.header-route{
+  font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--navy-700);
+}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.scan-badge{
+  display:flex;align-items:center;gap:6px;
+  font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--navy-700);
+}
+.pulse-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--rw-green);
+  box-shadow:0 0 6px var(--rw-green);
+  animation:pulse 2.2s ease infinite;
+}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 6px var(--rw-green)}50%{opacity:.5;box-shadow:0 0 12px var(--rw-green)}}
+.btn-hdr{
+  font-family:inherit;font-size:11px;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;
+  padding:6px 14px;cursor:pointer;
+  border-radius:2px;transition:all .15s;
+}
+.btn-rescan{
+  background:transparent;
+  color:var(--navy-700);border:1px solid var(--border);
+}
+.btn-rescan:hover{border-color:var(--navy-700);color:var(--navy-900)}
+.btn-remediate{
+  background:var(--rw-orange);
+  color:#fff;border:1px solid var(--rw-orange);
+  box-shadow:0 0 12px rgba(224,90,43,.35);
+}
+.btn-remediate:hover{background:#c74e22;box-shadow:0 0 18px rgba(224,90,43,.5)}
+
+/* ── Main ───────────────────────────────────────────────────────────────────── */
+.main{
+  position:relative;z-index:1;
+  max-width:1360px;margin:0 auto;
+  padding:24px 28px 64px;
+}
+
+/* ── Filter strip (boarding-pass top) ───────────────────────────────────────── */
+.filter-strip{
+  background:var(--paper);
+  border:1px solid var(--paper-stroke);
+  border-radius:2px;
+  padding:0;
+  margin-bottom:20px;
+  box-shadow:2px 3px 0 rgba(0,0,0,.08);
+  overflow:hidden;
+  position:relative;
+}
+/* left status edge */
+.filter-strip::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;
+  width:4px;background:var(--navy-900);
+}
+/* top perforation */
+.filter-strip::after{
+  content:'';position:absolute;left:4px;right:0;top:0;
+  height:3px;
+  background:repeating-linear-gradient(90deg,var(--paper-stroke) 0,var(--paper-stroke) 6px,transparent 6px,transparent 12px);
+}
+.filter-inner{
+  padding:18px 22px 18px 26px;
+  display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap;
+}
+.filter-col{display:flex;flex-direction:column;gap:5px}
+.f-label{
+  font-size:11px;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;
+  color:var(--navy-900);
+}
+select,input[type="text"]{
+  font-family:'JetBrains Mono',monospace;
+  font-size:13px;font-weight:500;
+  color:var(--navy-900);
+  background:var(--paper-cream);
+  border:1px solid var(--paper-stroke);
+  border-radius:2px;
+  padding:7px 32px 7px 10px;
+  outline:none;
+  transition:border-color .15s;
+  appearance:none;
+}
+select{
+  min-width:200px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2300205B' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;
+}
+select:focus,input[type="text"]:focus{border-color:var(--navy-700)}
+input[type="text"]{min-width:220px;padding-left:30px}
+.search-wrap{position:relative}
+.search-ico{
+  position:absolute;left:9px;top:50%;transform:translateY(-50%);
+  color:var(--paper-stroke);pointer-events:none;
+}
+.filter-actions{margin-left:auto;display:flex;gap:8px;align-items:flex-end}
+.btn-paper{
+  font-family:inherit;font-size:11px;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;
+  padding:7px 14px;cursor:pointer;border-radius:2px;
+  background:transparent;border:1px solid var(--paper-stroke);
+  color:var(--navy-700);transition:all .15s;
+}
+.btn-paper:hover{border-color:var(--navy-700);color:var(--navy-900)}
+
+/* ── Instrument row (stat cards) ────────────────────────────────────────────── */
+.instruments{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:12px;
+  margin-bottom:20px;
+}
+.gauge{
+  background:var(--paper);
+  border:1px solid var(--border);
+  border-radius:2px;
+  padding:16px 18px 14px;
+  position:relative;
+  overflow:hidden;
+  cursor:pointer;
+  transition:border-color .15s;
+}
+.gauge:hover{border-color:var(--border-bright)}
+/* micro grid */
+.gauge::before{
+  content:'';position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(0,32,91,.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,32,91,.04) 1px,transparent 1px);
+  background-size:16px 16px;
+}
+/* accent top edge */
+.gauge::after{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+}
+.gauge.total::after   {background:var(--navy-500)}
+.gauge.vuln::after    {background:var(--rw-orange)}
+.gauge.critical::after{background:var(--rw-orange);opacity:.7}
+.gauge.outdated::after{background:var(--rw-gold)}
+.gauge.clear::after   {background:var(--rw-green)}
+.g-label{
+  font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--navy-700);margin-bottom:10px;position:relative;
+}
+.g-value{
+  font-size:36px;font-weight:700;
+  letter-spacing:-.02em;
+  line-height:1;
+  margin-bottom:5px;position:relative;
+}
+.gauge.total   .g-value {color:var(--navy-900)}
+.gauge.vuln    .g-value {color:var(--rw-orange)}
+.gauge.critical .g-value{color:var(--rw-orange)}
+.gauge.outdated .g-value{color:var(--rw-gold)}
+.gauge.clear   .g-value {color:var(--rw-green)}
+.g-sub{font-size:11px;color:var(--navy-700);position:relative;letter-spacing:.04em}
+.g-bar{
+  position:relative;
+  height:3px;background:rgba(0,32,91,.1);
+  border-radius:1px;margin-top:10px;overflow:hidden;
+}
+.g-fill{
+  height:100%;border-radius:1px;
+  transition:width .6s cubic-bezier(.4,0,.2,1);
+}
+.gauge.total    .g-fill{background:var(--data-cyan)}
+.gauge.vuln     .g-fill{background:var(--rw-orange)}
+.gauge.critical .g-fill{background:var(--rw-orange)}
+.gauge.outdated .g-fill{background:var(--rw-gold)}
+.gauge.clear    .g-fill{background:var(--rw-green)}
+
+/* flip animation for numbers */
+.flip-in{animation:flipDown .32s ease both}
+@keyframes flipDown{
+  from{opacity:0;transform:translateY(-10px)}
+  to  {opacity:1;transform:translateY(0)}
+}
+
+/* ── SBOM panel ─────────────────────────────────────────────────────────────── */
+.panel{
+  background:var(--ck-dark);
+  border:1px solid var(--border);
+  border-radius:2px;
+  overflow:hidden;
+}
+.panel-head{
+  padding:13px 20px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;
+  background:var(--ck-storm);
+}
+.panel-title{
+  font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--navy-900);
+}
+.pkg-count{
+  font-size:11px;letter-spacing:.06em;
+  background:var(--paper-cream);border:1px solid var(--border);
+  color:var(--navy-700);border-radius:2px;padding:2px 8px;
+}
+.panel-right{margin-left:auto;display:flex;gap:6px;align-items:center}
+
+/* status filter tabs */
+.tab-strip{
+  display:flex;gap:3px;
+  background:var(--paper-cream);border:1px solid var(--border);
+  border-radius:2px;padding:3px;
+}
+.stab{
+  font-family:inherit;font-size:11px;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;
+  padding:5px 12px;border-radius:1px;cursor:pointer;
+  border:none;background:none;color:var(--navy-600);
+  transition:all .12s;
+}
+.stab.active{background:var(--navy-900);color:var(--paper);box-shadow:inset 0 0 0 1px var(--navy-700)}
+.stab:hover:not(.active){color:var(--navy-900)}
+
+/* ── Table ───────────────────────────────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse}
+thead tr{border-bottom:1px solid var(--border)}
+th{
+  padding:10px 16px;text-align:left;
+  font-size:11px;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;
+  color:var(--navy-700);
+  background:var(--ck-storm);
+  white-space:nowrap;cursor:pointer;user-select:none;
+}
+th:hover{color:var(--navy-900)}
+th.sorted{color:var(--rw-gold)}
+
+tbody tr{
+  border-bottom:1px solid rgba(0,32,91,.1);
+  transition:background .1s;
+  cursor:pointer;
+  position:relative;
+}
+tbody tr:hover{background:rgba(0,32,91,.05)}
+tbody tr.row-selected{background:rgba(0,32,91,.09)}
+
+/* status left edge on rows */
+tbody tr td:first-child{padding-left:0}
+.edge-cell{
+  width:3px;padding:0!important;
+}
+.edge-vuln    {background:var(--rw-orange)}
+.edge-outdated{background:var(--rw-gold)}
+.edge-compliant{background:var(--rw-green)}
+.edge-unknown {background:var(--navy-700)}
+
+td{
+  padding:12px 16px;font-size:13px;vertical-align:middle;
+}
+.td-pkg{font-weight:600;color:var(--navy-900);letter-spacing:.02em}
+.td-pkg-sub{font-size:11px;color:var(--navy-600);font-weight:400;margin-top:2px;letter-spacing:.03em}
+.td-mono{font-size:12px;font-family:'JetBrains Mono',monospace;letter-spacing:.02em}
+.td-current{color:var(--navy-700)}
+.td-rec     {color:var(--navy-900);font-weight:700}
+.td-behind  {color:var(--rw-gold);font-weight:600}
+.td-latest  {color:var(--navy-600)}
+
+/* status badge */
+.status-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  padding:3px 8px;border-radius:1px;
+  border:1px solid;
+}
+.sb-vuln    {color:var(--rw-orange);border-color:rgba(224,90,43,.4);background:rgba(224,90,43,.08)}
+.sb-outdated{color:var(--rw-gold);border-color:rgba(240,184,0,.4);background:rgba(240,184,0,.08)}
+.sb-compliant{color:var(--rw-green);border-color:rgba(58,165,106,.4);background:rgba(58,165,106,.08)}
+.sb-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.sb-vuln .sb-dot    {background:var(--rw-orange);box-shadow:0 0 5px var(--rw-orange)}
+.sb-outdated .sb-dot{background:var(--rw-gold);box-shadow:0 0 5px var(--rw-gold)}
+.sb-compliant .sb-dot{background:var(--rw-green);box-shadow:0 0 5px var(--rw-green)}
+
+/* CVE chips */
+.cve-chip{
+  display:inline-flex;align-items:center;gap:4px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;font-weight:600;letter-spacing:.03em;
+  background:rgba(201,78,32,.1);
+  border:1px solid rgba(201,78,32,.4);
+  color:var(--rw-orange);
+  border-radius:1px;padding:2px 7px;
+  margin:1px;white-space:nowrap;
+}
+.cve-chip.sev-critical{border-color:rgba(201,78,32,.7);background:rgba(201,78,32,.15)}
+.cve-chip.sev-high    {border-color:rgba(201,78,32,.45);background:rgba(201,78,32,.08)}
+.cve-chip.sev-medium  {color:var(--rw-gold);border-color:rgba(200,144,0,.4);background:rgba(200,144,0,.08)}
+.cve-chip.sev-low     {color:var(--navy-600);border-color:var(--border);background:transparent}
+.sev-pip{
+  font-size:9px;font-weight:800;letter-spacing:.06em;
+  padding:1px 5px;border-radius:1px;margin-left:3px;
+}
+.pip-critical{background:var(--rw-orange);color:#fff}
+.pip-high    {background:rgba(224,90,43,.6);color:#fff}
+.pip-medium  {background:rgba(200,144,0,.85);color:#fff}
+.pip-low     {background:var(--navy-700);color:var(--navy-300)}
+.no-cve{font-size:11px;color:var(--navy-600);letter-spacing:.04em}
+
+/* used-in */
+.used-cell{font-size:11px;color:var(--navy-700);letter-spacing:.03em}
+
+/* action btns */
+.act-wrap{display:flex;gap:6px;align-items:center}
+.btn-fix{
+  font-family:inherit;font-size:10px;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;
+  padding:5px 11px;cursor:pointer;border-radius:1px;
+  background:rgba(201,78,32,.12);color:var(--rw-orange);
+  border:1px solid rgba(201,78,32,.45);
+  transition:all .12s;
+}
+.btn-fix:hover{background:rgba(201,78,32,.22)}
+.btn-det{
+  font-family:inherit;font-size:10px;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;
+  padding:5px 10px;cursor:pointer;border-radius:1px;
+  background:transparent;color:var(--navy-700);
+  border:1px solid var(--border);transition:all .12s;
+}
+.btn-det:hover{border-color:var(--border-bright);color:var(--navy-900)}
+
+/* type badge */
+.type-badge{
+  font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  padding:2px 7px;border-radius:1px;border:1px solid;
+}
+.type-python{color:var(--navy-600);border-color:rgba(0,32,91,.25);background:rgba(0,32,91,.06)}
+.type-binary{color:var(--rw-gold);border-color:rgba(200,144,0,.35);background:rgba(200,144,0,.06)}
+
+/* ── Empty state ─────────────────────────────────────────────────────────────── */
+.empty{padding:56px;text-align:center;color:var(--navy-500)}
+.empty p{font-size:11px;letter-spacing:.08em;margin-top:12px}
+
+/* ── Drawer overlay ──────────────────────────────────────────────────────────── */
+.overlay{
+  position:fixed;inset:0;z-index:200;
+  background:rgba(0,32,91,.28);backdrop-filter:blur(2px);
+  opacity:0;pointer-events:none;transition:opacity .2s;
+}
+.overlay.open{opacity:1;pointer-events:all}
+
+/* ── Drawer (boarding-pass) ──────────────────────────────────────────────────── */
+.drawer{
+  position:fixed;right:0;top:0;bottom:0;
+  width:520px;z-index:201;
+  background:var(--paper);
+  border-left:4px solid var(--navy-900);
+  transform:translateX(100%);
+  transition:transform .22s cubic-bezier(.4,0,.2,1);
+  overflow-y:auto;
+  display:flex;flex-direction:column;
+}
+.drawer.open{transform:translateX(0)}
+
+/* boarding-pass top perforations */
+.bp-perf{
+  height:12px;
+  background:repeating-linear-gradient(90deg,var(--paper-stroke) 0,var(--paper-stroke) 8px,transparent 8px,transparent 16px);
+  flex-shrink:0;
+}
+/* status bar */
+.bp-status-bar{
+  height:5px;flex-shrink:0;
+}
+
+.bp-header{
+  padding:20px 26px 16px;
+  border-bottom:1px dashed var(--paper-stroke);
+  position:relative;flex-shrink:0;
+}
+/* corner coordinate display */
+.bp-coord{
+  position:absolute;right:20px;top:18px;
+  font-size:9px;letter-spacing:.12em;color:var(--paper-stroke);
+  text-align:right;line-height:1.6;
+}
+.bp-pkg-name{
+  font-size:24px;font-weight:700;
+  color:var(--navy-900);letter-spacing:.04em;margin-bottom:4px;
+}
+.bp-pkg-meta{
+  font-size:12px;color:var(--navy-700);
+  letter-spacing:.08em;text-transform:uppercase;
+  display:flex;align-items:center;gap:10px;
+}
+.bp-close{
+  position:absolute;right:20px;bottom:16px;
+  background:none;border:1px solid var(--paper-stroke);
+  color:var(--navy-600);cursor:pointer;
+  font-family:inherit;font-size:10px;letter-spacing:.08em;
+  padding:4px 10px;border-radius:1px;transition:all .12s;
+}
+.bp-close:hover{border-color:var(--navy-700);color:var(--navy-900)}
+
+.bp-body{padding:20px 26px;flex:1}
+.bp-section{margin-bottom:22px}
+.bp-section-title{
+  font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--navy-700);border-bottom:1px solid var(--paper-stroke);
+  padding-bottom:6px;margin-bottom:12px;
+}
+.bp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.bp-field{
+  background:var(--paper-cream);
+  border:1px solid var(--paper-stroke);
+  border-radius:1px;
+  padding:9px 12px;
+}
+.bp-field label{
+  display:block;font-size:10px;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;
+  color:var(--navy-700);margin-bottom:3px;
+}
+.bp-field span{
+  font-size:13px;font-weight:600;
+  color:var(--navy-900);font-family:'JetBrains Mono',monospace;
+}
+
+/* CVE card in drawer */
+.cve-card{
+  background:var(--paper-cream);
+  border-left:3px solid var(--rw-orange);
+  border-top:1px solid rgba(224,90,43,.25);
+  border-right:1px solid rgba(224,90,43,.25);
+  border-bottom:1px solid rgba(224,90,43,.25);
+  border-radius:0 1px 1px 0;
+  padding:12px 14px;margin-bottom:8px;
+}
+.cve-card-id{
+  font-size:12px;font-weight:700;
+  color:var(--navy-900);font-family:'JetBrains Mono',monospace;
+  letter-spacing:.04em;margin-bottom:5px;
+  display:flex;align-items:center;gap:8px;
+}
+.cve-card-desc{font-size:11px;color:var(--navy-700);line-height:1.6}
+
+/* usage file strip */
+.usage-strip{
+  background:var(--paper-cream);
+  border:1px solid var(--paper-stroke);
+  border-radius:1px;
+  padding:9px 12px;margin-bottom:6px;
+  font-family:'JetBrains Mono',monospace;
+}
+.us-file{font-size:11px;font-weight:600;color:var(--navy-900);margin-bottom:3px}
+.us-line{font-size:10px;color:var(--navy-600)}
+.us-code{font-size:11px;color:var(--navy-800);margin-top:3px;color:#1a3460}
+
+/* bottom perforation on drawer */
+.bp-actions{
+  padding:16px 26px 20px;
+  border-top:1px dashed var(--paper-stroke);
+  flex-shrink:0;
+}
+.bp-action-row{display:flex;gap:8px}
+.btn-bp-primary{
+  flex:1;font-family:inherit;font-size:12px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;
+  padding:10px;cursor:pointer;border-radius:1px;
+  background:var(--navy-900);color:var(--paper);
+  border:1px solid var(--navy-700);
+  transition:all .15s;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.btn-bp-primary:hover{background:var(--navy-700)}
+.btn-bp-ghost{
+  font-family:inherit;font-size:12px;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;
+  padding:10px 16px;cursor:pointer;border-radius:1px;
+  background:transparent;color:var(--navy-700);
+  border:1px solid var(--paper-stroke);transition:all .15s;
+}
+.btn-bp-ghost:hover{border-color:var(--navy-700);color:var(--navy-900)}
+
+/* ── Toast ───────────────────────────────────────────────────────────────────── */
+.toast{
+  position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(12px);
+  background:var(--navy-900);border:1px solid var(--navy-700);
+  color:var(--paper);border-radius:2px;
+  padding:9px 20px;font-size:12px;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;
+  opacity:0;pointer-events:none;
+  transition:opacity .2s,transform .2s;
+  z-index:999;white-space:nowrap;
+  box-shadow:0 4px 20px rgba(0,32,91,.18);
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── Responsive ─────────────────────────────────────────────────────────────── */
+@media(max-width:1100px){.instruments{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:760px){
+  .instruments{grid-template-columns:repeat(2,1fr)}
+  .drawer{width:100%}
+}
+  </style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="logo-wrap">
+    <div class="logo-mark">RZ</div>
+    <span class="logo-text">RunwayZero</span>
+  </div>
+  <div class="header-sep"></div>
+  <span class="header-route">SBOM · COMPLIANCE · OPS</span>
+  <div class="header-right">
+    <div class="scan-badge">
+      <div class="pulse-dot"></div>
+      Live · Last scan 2 min ago
+    </div>
+    <button class="btn-hdr btn-rescan" onclick="triggerScan()">↻ Re-scan</button>
+    <button class="btn-hdr btn-remediate" onclick="showToast('⚡ RunwayZero pipeline triggered')">⚡ Auto-remediate All</button>
+  </div>
+</header>
+
+<!-- ── MAIN ── -->
+<div class="main">
+
+  <!-- Filter strip (boarding-pass style) -->
+  <div class="filter-strip">
+    <div class="filter-inner">
+      <div class="filter-col">
+        <label class="f-label">Portfolio</label>
+        <select id="portfolioSelect" onchange="showToast('Switching portfolio…')">
+          <option value="">ALL PORTFOLIOS</option>
+          <option value="customer-platforms" selected>CUSTOMER PLATFORMS</option>
+          <option value="data-ai">DATA &amp; AI</option>
+          <option value="infra-ops">INFRA &amp; OPS</option>
+          <option value="digital-channels">DIGITAL CHANNELS</option>
+        </select>
+      </div>
+      <div class="filter-col">
+        <label class="f-label">Application</label>
+        <select id="appSelect" onchange="showToast('Loading SBOM…')">
+          <option value="">ALL APPLICATIONS</option>
+          <option value="demo-app" selected>DEMO-APP</option>
+          <option value="booking-engine">BOOKING-ENGINE</option>
+          <option value="loyalty-portal">LOYALTY-PORTAL</option>
+          <option value="cargo-api">CARGO-API</option>
+        </select>
+      </div>
+      <div class="filter-col">
+        <label class="f-label">Branch</label>
+        <select id="branchSelect">
+          <option value="main" selected>MAIN</option>
+          <option value="uat">UAT</option>
+          <option value="feature">RUNWAYZERO/CVE-2026-33626</option>
+        </select>
+      </div>
+      <div class="filter-col search-wrap">
+        <label class="f-label">Search</label>
+        <svg class="search-ico" width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M9.5 9.5L12.5 12.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <input type="text" id="searchInput" placeholder="Package name or CVE…" oninput="renderTable()" />
+      </div>
+      <div class="filter-actions">
+        <button class="btn-paper" onclick="exportCSV()">↓ Export CSV</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Instruments -->
+  <div class="instruments" id="instruments"></div>
+
+  <!-- SBOM panel -->
+  <div class="panel">
+    <div class="panel-head">
+      <span class="panel-title">Packages &amp; Binaries</span>
+      <span class="pkg-count" id="pkgCount">—</span>
+      <div class="panel-right">
+        <div class="tab-strip" id="tabStrip">
+          <button class="stab active" data-f="all"        onclick="setTab(this)">All</button>
+          <button class="stab"        data-f="vulnerable"  onclick="setTab(this)">Vulnerable</button>
+          <button class="stab"        data-f="outdated"    onclick="setTab(this)">Outdated</button>
+          <button class="stab"        data-f="compliant"   onclick="setTab(this)">Compliant</button>
+        </div>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:3px;padding:0"></th>
+          <th onclick="sortBy('name')">Package</th>
+          <th onclick="sortBy('type')">Type</th>
+          <th onclick="sortBy('current')">Current</th>
+          <th onclick="sortBy('rec')">Recommended</th>
+          <th onclick="sortBy('latest')">Latest</th>
+          <th onclick="sortBy('status')">Status</th>
+          <th>CVEs</th>
+          <th>Used In</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div id="emptyState" class="empty" style="display:none">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" opacity=".35"><circle cx="18" cy="18" r="16" stroke="#9fb4cf" stroke-width="1"/><path d="M12 18h12M18 12v12" stroke="#9fb4cf" stroke-width="1" stroke-linecap="round"/></svg>
+      <p>No packages match the current filters.</p>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- ── OVERLAY ── -->
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+
+<!-- ── DRAWER (boarding pass) ── -->
+<div class="drawer" id="drawer">
+  <div class="bp-perf"></div>
+  <div class="bp-status-bar" id="bpStatusBar"></div>
+  <div class="bp-header" id="bpHeader"></div>
+  <div class="bp-body" id="bpBody"></div>
+  <div class="bp-actions" id="bpActions"></div>
+  <div class="bp-perf" style="transform:scaleY(-1)"></div>
+</div>
+
+<!-- ── TOAST ── -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Data ───────────────────────────────────────────────────────────────────────
+const PKGS = [
+  { id:1, name:'lmdeploy',     type:'Python', eco:'pip',    current:'0.12.2', rec:'0.12.3', latest:'0.12.3', status:'vulnerable',
+    cves:[{id:'CVE-2026-33626',sev:'critical',desc:'SSRF via unvalidated image_url in the VL decode() function allows server-side requests to internal endpoints including AWS IMDS, leaking IAM credentials.'}],
+    usedIn:[{file:'app.py',line:12,code:'from lmdeploy.vl import decode'},{file:'app.py',line:47,code:'result = decode(image_url=url)'}],
+    license:'Apache-2.0', fixBranch:'runwayzero/cve-2026-33626' },
+  { id:2, name:'fastapi',      type:'Python', eco:'pip',    current:'0.115.0',rec:'0.115.0',latest:'0.115.0',status:'compliant',
+    cves:[], usedIn:[{file:'app.py',line:1,code:'from fastapi import FastAPI, Request'},{file:'app.py',line:8,code:'app = FastAPI()'}],
+    license:'MIT', fixBranch:null },
+  { id:3, name:'pydantic',     type:'Python', eco:'pip',    current:'2.6.0',  rec:'2.9.2',  latest:'2.9.2',  status:'outdated',
+    cves:[], usedIn:[{file:'models.py',line:3,code:'from pydantic import BaseModel'}],
+    license:'MIT', fixBranch:null },
+  { id:4, name:'uvicorn',      type:'Python', eco:'pip',    current:'0.30.0', rec:'0.30.6', latest:'0.30.6', status:'outdated',
+    cves:[], usedIn:[{file:'app.py',line:2,code:'import uvicorn'}],
+    license:'BSD-3-Clause', fixBranch:null },
+  { id:5, name:'requests',     type:'Python', eco:'pip',    current:'2.31.0', rec:'2.32.3', latest:'2.32.3', status:'vulnerable',
+    cves:[{id:'CVE-2024-35195',sev:'medium',desc:'Proxy-Authorization header leak when following redirects across hosts.'}],
+    usedIn:[{file:'tools/genspark.py',line:8,code:'import requests'},{file:'tools/verify.py',line:4,code:'import requests'}],
+    license:'Apache-2.0', fixBranch:null },
+  { id:6, name:'cryptography', type:'Python', eco:'pip',    current:'41.0.3', rec:'43.0.1', latest:'43.0.1', status:'vulnerable',
+    cves:[{id:'CVE-2024-26130',sev:'high',desc:'NULL pointer dereference in PKCS12 key parsing can cause a segfault when processing maliciously crafted PKCS#12 files.'},{id:'CVE-2023-49083',sev:'medium',desc:'NULL pointer dereference when loading certificates with certain malformed data.'}],
+    usedIn:[{file:'auth.py',line:5,code:'from cryptography.hazmat.primitives import hashes'}],
+    license:'Apache-2.0', fixBranch:null },
+  { id:7, name:'boto3',        type:'Python', eco:'pip',    current:'1.34.0', rec:'1.35.42',latest:'1.35.42',status:'outdated',
+    cves:[], usedIn:[{file:'tools/ssm.py',line:4,code:'import boto3'},{file:'tools/codecommit.py',line:4,code:'import boto3'}],
+    license:'Apache-2.0', fixBranch:null },
+  { id:8, name:'pillow',       type:'Python', eco:'pip',    current:'10.3.0', rec:'10.4.0', latest:'10.4.0', status:'vulnerable',
+    cves:[{id:'CVE-2024-28219',sev:'high',desc:'Buffer overflow in _imagingcms.c via a crafted file, allowing potential arbitrary code execution.'}],
+    usedIn:[{file:'utils/image_proc.py',line:2,code:'from PIL import Image'}],
+    license:'HPND', fixBranch:null },
+  { id:9, name:'starlette',    type:'Python', eco:'pip',    current:'0.41.0', rec:'0.41.0', latest:'0.41.3', status:'compliant',
+    cves:[], usedIn:[{file:'app.py',line:4,code:'from starlette.middleware.cors import CORSMiddleware'}],
+    license:'BSD-3-Clause', fixBranch:null },
+  { id:10,name:'PyYAML',       type:'Python', eco:'pip',    current:'6.0.1',  rec:'6.0.1',  latest:'6.0.2',  status:'compliant',
+    cves:[], usedIn:[{file:'config.py',line:2,code:'import yaml'}],
+    license:'MIT', fixBranch:null },
+  { id:11,name:'openssl',      type:'Binary', eco:'system', current:'3.0.2',  rec:'3.0.15', latest:'3.3.2',  status:'vulnerable',
+    cves:[{id:'CVE-2024-5535',sev:'critical',desc:'SSL_select_next_proto buffer overread — crash or data exposure when NPN is misconfigured.'},{id:'CVE-2024-4741',sev:'high',desc:'Use-after-free when freeing X.509 names.'}],
+    usedIn:[{file:'/usr/lib/x86_64-linux-gnu/libssl.so.3',line:null,code:'System library'}],
+    license:'Apache-2.0', fixBranch:null },
+  { id:12,name:'libcurl',      type:'Binary', eco:'system', current:'7.81.0', rec:'7.88.1', latest:'8.10.1', status:'vulnerable',
+    cves:[{id:'CVE-2024-2398',sev:'high',desc:'HTTP/2 push headers memory leak allows crash via specially crafted responses.'}],
+    usedIn:[{file:'/usr/lib/x86_64-linux-gnu/libcurl.so.4',line:null,code:'System library'}],
+    license:'curl', fixBranch:null },
+  { id:13,name:'numpy',        type:'Python', eco:'pip',    current:'1.26.4', rec:'1.26.4', latest:'2.1.2',  status:'outdated',
+    cves:[], usedIn:[{file:'utils/image_proc.py',line:1,code:'import numpy as np'}],
+    license:'BSD-3-Clause', fixBranch:null },
+  { id:14,name:'setuptools',   type:'Python', eco:'pip',    current:'68.2.2', rec:'75.2.0', latest:'75.2.0', status:'vulnerable',
+    cves:[{id:'CVE-2024-6345',sev:'high',desc:'Remote code execution via malicious package URL in the package_index module.'}],
+    usedIn:[{file:'requirements.txt',line:null,code:'Transitive dependency'}],
+    license:'MIT', fixBranch:null },
+];
+
+// ── State ──────────────────────────────────────────────────────────────────────
+let activeFilter='all', sortField='status', sortDir=1, selectedId=null;
+
+// ── Boot ───────────────────────────────────────────────────────────────────────
+renderInstruments();
+renderTable();
+
+// ── Instruments ───────────────────────────────────────────────────────────────
+function renderInstruments(){
+  const total=PKGS.length,
+        vuln =PKGS.filter(p=>p.status==='vulnerable').length,
+        out  =PKGS.filter(p=>p.status==='outdated').length,
+        cmp  =PKGS.filter(p=>p.status==='compliant').length,
+        crit =PKGS.flatMap(p=>p.cves).filter(c=>c.sev==='critical').length;
+  const pct=n=>Math.round(n/total*100);
+  document.getElementById('instruments').innerHTML=`
+    <div class="gauge total">
+      <div class="g-label">Total Packages</div>
+      <div class="g-value flip-in">${total}</div>
+      <div class="g-sub">pip + system binaries</div>
+      <div class="g-bar"><div class="g-fill" style="width:100%"></div></div>
+    </div>
+    <div class="gauge vuln" onclick="setTabById('vulnerable')" title="Filter vulnerable">
+      <div class="g-label">Vulnerable</div>
+      <div class="g-value flip-in">${vuln}</div>
+      <div class="g-sub">${pct(vuln)}% of packages</div>
+      <div class="g-bar"><div class="g-fill" style="width:${pct(vuln)}%"></div></div>
+    </div>
+    <div class="gauge critical" title="Critical CVEs">
+      <div class="g-label">Critical CVEs</div>
+      <div class="g-value flip-in">${crit}</div>
+      <div class="g-sub">Immediate action required</div>
+      <div class="g-bar"><div class="g-fill" style="width:${Math.min(100,crit*20)}%"></div></div>
+    </div>
+    <div class="gauge outdated" onclick="setTabById('outdated')" title="Filter outdated">
+      <div class="g-label">Outdated</div>
+      <div class="g-value flip-in">${out}</div>
+      <div class="g-sub">${pct(out)}% behind latest</div>
+      <div class="g-bar"><div class="g-fill" style="width:${pct(out)}%"></div></div>
+    </div>
+    <div class="gauge clear" onclick="setTabById('compliant')" title="Filter compliant">
+      <div class="g-label">Clear</div>
+      <div class="g-value flip-in">${cmp}</div>
+      <div class="g-sub">${pct(cmp)}% compliant</div>
+      <div class="g-bar"><div class="g-fill" style="width:${pct(cmp)}%"></div></div>
+    </div>`;
+}
+
+// ── Table ─────────────────────────────────────────────────────────────────────
+function statusOrder(s){return s==='vulnerable'?0:s==='outdated'?1:2}
+function getFiltered(){
+  const q=document.getElementById('searchInput').value.toLowerCase();
+  return PKGS
+    .filter(p=>activeFilter==='all'||p.status===activeFilter)
+    .filter(p=>!q||p.name.toLowerCase().includes(q)||p.cves.some(c=>c.id.toLowerCase().includes(q)))
+    .sort((a,b)=>{
+      const av=sortField==='name'?a.name:sortField==='type'?a.type:sortField==='current'?a.current:sortField==='rec'?a.rec:sortField==='latest'?a.latest:sortField==='status'?statusOrder(a.status):a.name;
+      const bv=sortField==='status'?statusOrder(b.status):sortField==='rec'?b.rec:(b[sortField]||b.name);
+      return av<bv?-sortDir:av>bv?sortDir:0;
+    });
+}
+
+function renderTable(){
+  const rows=getFiltered();
+  const tbody=document.getElementById('tableBody');
+  document.getElementById('pkgCount').textContent=rows.length;
+  document.getElementById('emptyState').style.display=rows.length?'none':'';
+  if(!rows.length){tbody.innerHTML='';return}
+  tbody.innerHTML=rows.map(p=>{
+    const edgeCls=`edge-${p.status==='vulnerable'?'vuln':p.status==='outdated'?'outdated':p.status==='compliant'?'compliant':'unknown'}`;
+    const vCls=p.status==='outdated'||p.status==='vulnerable'?'td-behind':'td-current';
+    const cveHtml=p.cves.length
+      ?p.cves.map(c=>`<span class="cve-chip sev-${c.sev}">${c.id}<span class="sev-pip pip-${c.sev}">${c.sev.toUpperCase()}</span></span>`).join('')
+      :`<span class="no-cve">—</span>`;
+    const files=[...new Set(p.usedIn.map(u=>u.file))];
+    const usedHtml=`<span class="used-cell">${files.slice(0,2).join(', ')}${files.length>2?` +${files.length-2}`:''}</span>`;
+    const actHtml=p.status==='vulnerable'
+      ?`<div class="act-wrap"><button class="btn-fix" onclick="triggerFix(event,${p.id})">⚡ Fix</button><button class="btn-det" onclick="openDrawer(event,${p.id})">Details</button></div>`
+      :`<div class="act-wrap"><button class="btn-det" onclick="openDrawer(event,${p.id})">Details</button></div>`;
+    const typeCls=p.type==='Binary'?'type-binary':'type-python';
+    const sbCls=p.status==='vulnerable'?'sb-vuln':p.status==='outdated'?'sb-outdated':'sb-compliant';
+    return `<tr id="row-${p.id}" onclick="openDrawer(event,${p.id})" class="${selectedId===p.id?'row-selected':''}">
+      <td class="edge-cell ${edgeCls}"></td>
+      <td><div class="td-pkg">${p.name}</div><div class="td-pkg-sub">${p.eco} · ${p.license}</div></td>
+      <td><span class="type-badge ${typeCls}">${p.type}</span></td>
+      <td class="td-mono ${vCls}">${p.current}</td>
+      <td class="td-mono td-rec">${p.rec}</td>
+      <td class="td-mono td-latest">${p.latest}</td>
+      <td><span class="status-badge ${sbCls}"><span class="sb-dot"></span>${p.status.toUpperCase()}</span></td>
+      <td>${cveHtml}</td>
+      <td>${usedHtml}</td>
+      <td onclick="event.stopPropagation()">${actHtml}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Tabs ───────────────────────────────────────────────────────────────────────
+function setTab(el){
+  document.querySelectorAll('.stab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  activeFilter=el.dataset.f;
+  renderTable();
+}
+function setTabById(f){
+  const el=document.querySelector(`.stab[data-f="${f}"]`);
+  if(el)setTab(el);
+}
+
+// ── Sort ───────────────────────────────────────────────────────────────────────
+function sortBy(f){
+  if(sortField===f)sortDir*=-1;else{sortField=f;sortDir=1}
+  renderTable();
+}
+
+// ── Drawer ─────────────────────────────────────────────────────────────────────
+function openDrawer(e,id){
+  e&&e.stopPropagation();
+  selectedId=id;renderTable();
+  const p=PKGS.find(x=>x.id===id);
+  const sbColor=p.status==='vulnerable'?'var(--rw-orange)':p.status==='outdated'?'var(--rw-gold)':'var(--rw-green)';
+  document.getElementById('bpStatusBar').style.background=sbColor;
+  document.getElementById('bpHeader').innerHTML=`
+    <div class="bp-coord">DEMO-APP · MAIN<br>${new Date().toISOString().slice(0,10)}</div>
+    <div class="bp-pkg-name">${p.name}</div>
+    <div class="bp-pkg-meta">
+      <span>${p.eco.toUpperCase()}</span><span>·</span>
+      <span>${p.type.toUpperCase()}</span><span>·</span>
+      <span>${p.license}</span>
+    </div>
+    <button class="bp-close" onclick="closeDrawer()">✕ CLOSE</button>`;
+  let cveSection='';
+  if(p.cves.length){
+    cveSection=`<div class="bp-section"><div class="bp-section-title">Known CVEs · ${p.cves.length}</div>
+      ${p.cves.map(c=>`<div class="cve-card">
+        <div class="cve-card-id">${c.id} <span class="sev-pip pip-${c.sev}">${c.sev.toUpperCase()}</span></div>
+        <div class="cve-card-desc">${c.desc}</div>
+      </div>`).join('')}
+    </div>`;
+  }
+  const usageSection=`<div class="bp-section"><div class="bp-section-title">Code Usage · ${p.usedIn.length} location${p.usedIn.length!==1?'s':''}</div>
+    ${p.usedIn.map(u=>`<div class="usage-strip">
+      <div class="us-file">${u.file}${u.line?':'+u.line:''}</div>
+      <div class="us-code">${u.code}</div>
+    </div>`).join('')}
+  </div>`;
+  document.getElementById('bpBody').innerHTML=`
+    <div class="bp-section"><div class="bp-section-title">Version Info</div>
+      <div class="bp-grid">
+        <div class="bp-field"><label>Current</label><span>${p.current}</span></div>
+        <div class="bp-field"><label>Recommended</label><span style="color:var(--navy-900);font-weight:700">${p.rec}</span></div>
+        <div class="bp-field"><label>Latest</label><span>${p.latest}</span></div>
+        <div class="bp-field"><label>Ecosystem</label><span>${p.eco}</span></div>
+        <div class="bp-field"><label>Type</label><span>${p.type}</span></div>
+      </div>
+    </div>
+    ${cveSection}${usageSection}`;
+  const actHtml=p.status==='vulnerable'
+    ?`<div class="bp-action-row">
+        <button class="btn-bp-primary" onclick="triggerFix(null,${p.id})">⚡ Auto-remediate with RunwayZero</button>
+        <button class="btn-bp-ghost" onclick="showToast('Opening CVE advisory…')">↗ CVE</button>
+      </div>`
+    :p.status==='outdated'
+    ?`<div class="bp-action-row"><button class="btn-bp-primary" onclick="showToast('Upgrade scheduled')">↑ Schedule Upgrade</button></div>`
+    :`<div class="bp-action-row"><button class="btn-bp-ghost" onclick="closeDrawer()">✕ Close</button></div>`;
+  document.getElementById('bpActions').innerHTML=actHtml;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('drawer').classList.add('open');
+}
+function closeDrawer(){
+  selectedId=null;renderTable();
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('drawer').classList.remove('open');
+}
+
+// ── Actions ────────────────────────────────────────────────────────────────────
+function triggerFix(e,id){
+  e&&e.stopPropagation();
+  showToast(`⚡ RunwayZero pipeline triggered · ${PKGS.find(x=>x.id===id).name}`);
+}
+function triggerScan(){showToast('↻ Scanning CodeCommit + SSM inventory…')}
+function exportCSV(){
+  const rows=getFiltered();
+  const csv=['Package,Type,Current,Recommended,Latest,Status,CVEs']
+    .concat(rows.map(p=>`${p.name},${p.type},${p.current},${p.rec},${p.latest},${p.status},"${p.cves.map(c=>c.id).join('; ')}"`))
+    .join('\n');
+  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:'sbom-compliance.csv'});
+  a.click();
+  showToast('CSV exported');
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────────
+let _tt;
+function showToast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),2800);
+}
+</script>
+</body>
+</html>

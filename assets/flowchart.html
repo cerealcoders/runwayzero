@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RunwayZero — Autonomous CVE Remediation Flow</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --red: #f85149;
+      --orange: #d29922;
+      --purple: #bc8cff;
+      --cyan: #39d353;
+      --teal: #56d364;
+      --pink: #f778ba;
+      --indigo: #818cf8;
+      --teams: #6264a7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 16px; color: #fff;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 18px; font-weight: 700; }
+    header span { color: var(--muted); font-size: 13px; margin-left: 8px; }
+    .legend {
+      margin-left: auto;
+      display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
+    }
+    .leg { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+    .leg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Layout ──────────────────────────────────────────────────────────── */
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 0;
+      height: calc(100vh - 65px);
+    }
+    .canvas-wrap {
+      overflow: auto;
+      padding: 32px;
+      background: var(--bg);
+      position: relative;
+    }
+    .sidebar {
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    /* ── Flow canvas ─────────────────────────────────────────────────────── */
+    .flow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      min-width: 560px;
+    }
+
+    /* ── Connector lines ─────────────────────────────────────────────────── */
+    .connector {
+      width: 2px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+    .connector.yes { background: var(--green); }
+    .connector.no  { background: var(--red); }
+    .connector-label {
+      font-size: 11px; font-weight: 700;
+      padding: 2px 6px; border-radius: 4px;
+      color: #fff;
+      margin: 0 auto;
+    }
+    .connector-label.yes { background: var(--green); }
+    .connector-label.no  { background: var(--red); }
+
+    .arrow-row {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+    .arrow-tip {
+      width: 0; height: 0;
+      border-left: 7px solid transparent;
+      border-right: 7px solid transparent;
+      border-top: 10px solid var(--border);
+    }
+    .arrow-tip.yes { border-top-color: var(--green); }
+    .arrow-tip.no  { border-top-color: var(--red); }
+
+    /* ── Node cards ──────────────────────────────────────────────────────── */
+    .node {
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 20px;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+      position: relative;
+      width: 460px;
+      user-select: none;
+    }
+    .node:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+    }
+    .node.active {
+      box-shadow: 0 0 0 2px var(--accent), 0 8px 30px rgba(88,166,255,0.2);
+      border-color: var(--accent);
+    }
+    .node-header {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .step-badge {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 11px; font-weight: 700;
+      padding: 2px 8px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .node-icon {
+      font-size: 18px; flex-shrink: 0;
+    }
+    .node-title {
+      font-size: 14px; font-weight: 700;
+      flex: 1;
+    }
+    .node-sub {
+      font-size: 12px; color: var(--muted); margin-top: 4px; padding-left: 32px;
+    }
+    .tool-tag {
+      display: inline-block;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 10px;
+      padding: 1px 6px;
+      color: var(--accent);
+      font-family: monospace;
+      margin-top: 6px; margin-left: 30px;
+    }
+
+    /* Node type colours */
+    .node.trigger   { background: #1a1f2e; border-color: var(--purple); }
+    .node.research  { background: #1a1e28; border-color: var(--cyan); }
+    .node.aws       { background: #1c1e1a; border-color: var(--orange); }
+    .node.git       { background: #1a2020; border-color: #4fc1a6; }
+    .node.test      { background: #1d1a22; border-color: var(--purple); }
+    .node.deploy    { background: #1c2018; border-color: var(--teal); }
+    .node.verify    { background: #1a1d20; border-color: var(--accent); }
+    .node.decision  {
+      background: #221e14;
+      border-color: var(--orange);
+      border-radius: 4px;
+      transform-origin: center;
+      position: relative;
+    }
+    .node.halt      { background: #221518; border-color: var(--red); }
+    .node.success   { background: #152215; border-color: var(--green); }
+    .node.cd        { background: #1a1a2e; border-color: var(--indigo); }
+    .node.human     { background: #221a2a; border-color: var(--pink); }
+    .node.promote   { background: #152222; border-color: #2dd4d4; }
+    .node.teams     {
+      background: #1a1a2c;
+      border-color: var(--teams);
+      border-style: dashed;
+    }
+    .node.teams .node-title { color: #a5a6d4; }
+
+    /* Divider label between pipeline sections */
+    .section-divider {
+      display: flex; align-items: center; gap: 12px;
+      width: 460px; margin: 8px 0;
+    }
+    .section-divider hr { flex: 1; border: none; border-top: 1px dashed var(--border); }
+    .section-divider span {
+      font-size: 10px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.1em;
+      white-space: nowrap;
+    }
+
+    /* Decision diamond shape hint */
+    .node.decision::before {
+      content: '';
+      position: absolute;
+      left: -8px; top: 50%; transform: translateY(-50%) rotate(45deg);
+      width: 14px; height: 14px;
+      background: var(--orange);
+      border-radius: 2px;
+    }
+
+    /* Branch fork for decision nodes */
+    .branch-row {
+      display: flex; gap: 32px; align-items: flex-start;
+      width: 100%;
+      justify-content: center;
+    }
+    .branch-col {
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+    }
+    .branch-label {
+      font-size: 11px; font-weight: 700;
+      padding: 3px 10px; border-radius: 4px;
+      margin-bottom: 4px; color: #fff;
+    }
+    .branch-label.yes { background: var(--green); }
+    .branch-label.no  { background: var(--red); }
+
+    /* ── Sidebar detail panel ────────────────────────────────────────────── */
+    .sidebar h2 {
+      font-size: 15px; font-weight: 700;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px; margin-bottom: 16px;
+      color: var(--accent);
+    }
+    .detail-placeholder {
+      color: var(--muted); font-size: 13px; line-height: 1.6;
+    }
+    .detail-node-title {
+      font-size: 16px; font-weight: 700; margin-bottom: 8px;
+    }
+    .detail-step {
+      display: inline-block;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 11px; color: var(--muted);
+      padding: 2px 8px; margin-bottom: 12px;
+    }
+    .detail-desc {
+      font-size: 13px; color: var(--muted); line-height: 1.65; margin-bottom: 16px;
+    }
+    .detail-section { margin-bottom: 14px; }
+    .detail-section h4 {
+      font-size: 11px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;
+    }
+    .code-block {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 11px;
+      font-family: 'Menlo', 'Monaco', monospace;
+      color: var(--accent);
+      white-space: pre-wrap;
+      word-break: break-all;
+      line-height: 1.5;
+    }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px; border-radius: 12px;
+      font-size: 11px; font-weight: 600;
+      margin: 2px;
+    }
+    .pill.input  { background: #1c2a3a; color: var(--accent); border: 1px solid #2a4060; }
+    .pill.output { background: #1a2a1a; color: var(--teal);  border: 1px solid #2a4a2a; }
+    .pill.error  { background: #2a1a1a; color: var(--red);   border: 1px solid #4a2a2a; }
+
+    .halts-note {
+      background: #2a1515; border: 1px solid var(--red);
+      border-radius: 6px; padding: 10px 12px;
+      font-size: 12px; color: #ffa3a0;
+    }
+    .success-note {
+      background: #152a15; border: 1px solid var(--green);
+      border-radius: 6px; padding: 10px 12px;
+      font-size: 12px; color: #a0ffa3;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">RZ</div>
+  <div>
+    <h1>RunwayZero</h1>
+    <span>Autonomous CVE Remediation Agent — Interactive Flow</span>
+  </div>
+  <div class="legend">
+    <div class="leg"><div class="leg-dot" style="background:#bc8cff"></div>Trigger / AI</div>
+    <div class="leg"><div class="leg-dot" style="background:#39d353"></div>Genspark Research</div>
+    <div class="leg"><div class="leg-dot" style="background:#d29922"></div>AWS / SSM</div>
+    <div class="leg"><div class="leg-dot" style="background:#4fc1a6"></div>CodeCommit / Git</div>
+    <div class="leg"><div class="leg-dot" style="background:#58a6ff"></div>Verify</div>
+    <div class="leg"><div class="leg-dot" style="background:#f85149"></div>Halt on Failure</div>
+    <div class="leg"><div class="leg-dot" style="background:#6264a7;border:1px dashed #9090c0;border-radius:50%;"></div>MS Teams Alert</div>
+    <div class="leg"><div class="leg-dot" style="background:#3fb950"></div>Success</div>
+    <div class="leg"><div class="leg-dot" style="background:#818cf8"></div>Auto-Deploy</div>
+    <div class="leg"><div class="leg-dot" style="background:#f778ba"></div>Human Review</div>
+    <div class="leg"><div class="leg-dot" style="background:#2dd4d4"></div>Branch Promotion</div>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="canvas-wrap">
+    <div class="flow" id="flow"></div>
+  </div>
+  <div class="sidebar">
+    <h2>Step Details</h2>
+    <div id="detail-panel">
+      <p class="detail-placeholder">Click any step in the flow to see its full details — inputs, outputs, tool call signature, and error handling.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Data model ────────────────────────────────────────────────────────────────
+const nodes = [
+  {
+    id: 'trigger',
+    step: 'TRIGGER',
+    icon: '⚡',
+    type: 'trigger',
+    title: 'CVE Received',
+    sub: 'Lambda event or CLI invocation with CVE-2026-33626',
+    tool: null,
+    detail: {
+      desc: 'RunwayZero is invoked with a CVE identifier — either via an AWS Lambda event payload or the local CLI. This starts the autonomous remediation pipeline.',
+      inputs: ['cve_id (e.g. CVE-2026-33626)', 'instance_id (runtime config)', 'host (e.g. 10.0.0.1:8080)', 'role_name (IAM role on EC2)', 'app_module_dir (path to app.py)'],
+      outputs: ['User prompt sent to Claude claude-opus-4-7 with all runtime values'],
+      code: `# Lambda entry\nlambda_handler({"cve_id": "CVE-2026-33626"}, ctx)\n\n# CLI entry\npython -m runwayzero_agent CVE-2026-33626`,
+      errorNote: null,
+    }
+  },
+  {
+    id: 'genspark',
+    step: 'STEP 1',
+    icon: '🔍',
+    type: 'research',
+    title: 'Genspark Research',
+    sub: 'Submit SBOM to Genspark API to confirm CVE & fix version',
+    tool: 'genspark_research(sbom=["lmdeploy==0.12.2"])',
+    detail: {
+      desc: 'The agent submits the current SBOM to the Genspark AI research API. Genspark enriches the CVE data — confirming that lmdeploy 0.12.2 is vulnerable and that 0.12.3 is the safe version. Falls back to a local JSON cache if the API is unavailable.',
+      inputs: ['sbom: ["lmdeploy==0.12.2"]', 'since_hours: 168 (look back 1 week)'],
+      outputs: ['Confirmed CVE details', 'Safe fix version: lmdeploy==0.12.3', 'from_cache flag if offline'],
+      code: `POST https://api.genspark.ai/v1/research\n{\n  "sbom": ["lmdeploy==0.12.2"],\n  "since_hours": 168\n}`,
+      errorNote: 'retryable: true — on failure, loads cached genspark-CVE-2026-33626.json. If no cache, halts.',
+    }
+  },
+  {
+    id: 'ssm_scan',
+    step: 'STEP 2',
+    icon: '🖥️',
+    type: 'aws',
+    title: 'SSM Inventory Scan',
+    sub: 'Find EC2 instances with vulnerable lmdeploy installed',
+    tool: 'ssm_inventory_scan(package="lmdeploy")',
+    detail: {
+      desc: 'Queries AWS Systems Manager inventory across all managed EC2 instances to identify which ones have the vulnerable lmdeploy package installed. Returns instance IDs, installed versions, and freshness timestamps.',
+      inputs: ['package: "lmdeploy"'],
+      outputs: ['instance_id', 'version (0.12.2 = vulnerable)', 'freshness_ts'],
+      code: `ssm.describe_instance_information()\n# For each instance:\nssm.list_inventory_entries(\n  InstanceId=...,\n  TypeName="AWS:Application"\n)`,
+      errorNote: 'retryable: true — transient AWS SDK failures will be retried once.',
+    }
+  },
+  {
+    id: 'code_scan',
+    step: 'STEP 3',
+    icon: '🔎',
+    type: 'git',
+    title: 'Scan CodeCommit Repo for Vulnerable Package Usage',
+    sub: 'Search codebase for imports/usage of lmdeploy to confirm actual exposure',
+    tool: 'codecommit_get_file(repo, branch, path) × multiple files',
+    detail: {
+      desc: 'Before committing to a fix, RunwayZero scans the CodeCommit repository source files to verify that the vulnerable package (lmdeploy) is actually imported and called in code — not just listed as an unused dependency. This step maps the real attack surface: which files, functions, and call sites use the vulnerable library. The results feed directly into the impact assessment.',
+      inputs: ['repo: demo-app', 'branch: main', 'Vulnerable package: lmdeploy', 'File types to scan: *.py'],
+      outputs: ['List of files that import lmdeploy', 'Specific import lines and line numbers', 'Call sites where vulnerable functions are invoked', 'Verdict: "actively used" or "listed but unused"'],
+      code: `# Agent lists repo tree then reads each .py file:\n# 1. Get file list\ncc.get_differences(\n  repositoryName="demo-app",\n  afterCommitSpecifier="main"\n)\n\n# 2. For each .py file, read and search:\nfor file_path in py_files:\n    content = cc.get_file(\n      repositoryName="demo-app",\n      commitSpecifier="main",\n      filePath=file_path\n    )["fileContent"].decode()\n\n    if "import lmdeploy" in content \\\n    or "from lmdeploy" in content:\n        hits.append({\n          "file": file_path,\n          "lines": find_usages(content)\n        })\n\n# Example finding:\n# app.py:12  → from lmdeploy.vl import decode\n# app.py:47  → result = decode(image_url=url)`,
+      errorNote: 'If lmdeploy is found with zero usage in code (only in requirements.txt), the agent flags this and still proceeds with the version bump — unused transitive deps still carry CVE risk. If usage IS found, call sites are included in the impact statement.',
+    }
+  },
+  {
+    id: 'impact',
+    step: 'STEP 4',
+    icon: '📋',
+    type: 'trigger',
+    title: 'Impact Assessment',
+    sub: 'Agent states affected team, scope, and exact code call sites in plain English',
+    tool: null,
+    detail: {
+      desc: 'The agent synthesises findings from Genspark research, SSM inventory scan, and the CodeCommit code scan into a plain-English impact statement. This now includes the specific files and line numbers where the vulnerable package is called, giving the team precise context.',
+      inputs: ['SSM scan results', 'CVE enrichment from Genspark', 'Code scan hits from STEP 3 (files + line numbers)'],
+      outputs: ['Impact statement printed to stdout, including call sites'],
+      code: `# Agent outputs e.g.:\n"CVE-2026-33626 affects lmdeploy 0.12.2 on\ninstance i-0abc123 (demo-app eugene team).\n\nVulnerable usage found in codebase:\n  app.py:12  from lmdeploy.vl import decode\n  app.py:47  result = decode(image_url=url)\n\nThe decode() call passes user-supplied URLs\ndirectly to lmdeploy — this is the SSRF\nvector. Fix: bump to 0.12.3."`,
+      errorNote: null,
+    }
+  },
+  {
+    id: 'read_req',
+    step: 'STEP 5',
+    icon: '📄',
+    type: 'git',
+    title: 'Read requirements.txt',
+    sub: 'Fetch current pinned dependencies from CodeCommit',
+    tool: 'codecommit_get_file(repo, branch, path)',
+    detail: {
+      desc: 'Reads the requirements.txt from the main branch of the demo-app CodeCommit repository. Critically, captures both the file content AND the branch_head_commit_id, which is required as parent_commit_id for the next write step.',
+      inputs: ['repo: demo-app', 'branch: main', 'path: requirements.txt'],
+      outputs: ['content (full file text)', 'branch_head_commit_id (for next step)', 'blob_id', 'parent_commit_id'],
+      code: `cc.get_file(\n  repositoryName="demo-app",\n  commitSpecifier="main",\n  filePath="requirements.txt"\n)\n# Also: cc.get_branch() for head commit`,
+      errorNote: 'retryable: false — if the read fails, the agent cannot safely proceed.',
+    }
+  },
+  {
+    id: 'mutate',
+    step: 'STEP 6',
+    icon: '✏️',
+    type: 'trigger',
+    title: 'Mutate requirements.txt',
+    sub: 'Bump lmdeploy==0.12.2 → lmdeploy==0.12.3 in memory',
+    tool: null,
+    detail: {
+      desc: 'The agent performs a targeted string replacement in the requirements content — changing only the lmdeploy version line. All other dependencies (fastapi, uvicorn, pydantic) must remain exactly verbatim. This mutation happens in the agent\'s working memory before any write.',
+      inputs: ['Original content from STEP 4'],
+      outputs: ['Mutated content string (all 4 lines preserved)'],
+      code: `# Original:\n# fastapi==0.115.0\n# uvicorn==0.30.0\n# pydantic==2.6.0\n# lmdeploy==0.12.2   ← CHANGE THIS\n\n# After mutation:\n# lmdeploy==0.12.3`,
+      errorNote: 'Agent must preserve newlines and all other pins exactly — mistakes break the sandbox pip install.',
+    }
+  },
+  {
+    id: 'push',
+    step: 'STEP 7',
+    icon: '⬆️',
+    type: 'git',
+    title: 'Push Fix Branch',
+    sub: 'Create branch runwayzero/cve-2026-33626 with patched file',
+    tool: 'codecommit_put_file(repo, branch, path, content, parent_commit_id, source_branch)',
+    detail: {
+      desc: 'Writes the mutated requirements.txt to a new branch "runwayzero/cve-2026-33626". If the branch doesn\'t exist yet, it is created off the source branch using the parent_commit_id captured in STEP 4.',
+      inputs: ['repo: demo-app', 'branch: runwayzero/cve-2026-33626', 'path: requirements.txt', 'content: mutated text', 'parent_commit_id: from STEP 4', 'source_branch: main'],
+      outputs: ['commit_id', 'branch name', 'branch_existed_before flag'],
+      code: `cc.create_branch(\n  repositoryName="demo-app",\n  branchName="runwayzero/cve-2026-33626",\n  commitId=<parent_commit_id>\n)\ncc.put_file(\n  repositoryName="demo-app",\n  branchName="runwayzero/cve-2026-33626",\n  fileContent=mutated.encode("utf-8"),\n  filePath="requirements.txt",\n  commitMessage="RunwayZero: bump lmdeploy"\n)`,
+      errorNote: 'retryable: false.',
+    }
+  },
+  {
+    id: 'pr',
+    step: 'STEP 8',
+    icon: '🔀',
+    type: 'git',
+    title: 'Open Pull Request',
+    sub: 'PR from fix branch — left open for team to merge when promoting to master',
+    tool: 'codecommit_create_pull_request(repo, title, source_branch, dest_branch, description)',
+    detail: {
+      desc: 'Creates a pull request from the fix branch for code review visibility. RunwayZero does NOT merge this PR — it is left open. The application team will use this PR as the vehicle to merge into master when they are ready to promote from UAT.',
+      inputs: ['repo: demo-app', 'title: "[RunwayZero] CVE-2026-33626: bump lmdeploy 0.12.2 -> 0.12.3"', 'source_branch: runwayzero/cve-2026-33626', 'dest_branch: master'],
+      outputs: ['pr_id', 'status', 'web_url (AWS Console link)'],
+      code: `cc.create_pull_request(\n  title="[RunwayZero] CVE-2026-33626...",\n  targets=[{\n    "repositoryName": "demo-app",\n    "sourceReference": "runwayzero/cve-2026-33626",\n    "destinationReference": "main"\n  }]\n)`,
+      errorNote: 'retryable: false. pr_id is required for STEPS 9, 10, 11.',
+    }
+  },
+  {
+    id: 'test',
+    step: 'STEP 9',
+    icon: '🧪',
+    type: 'test',
+    title: 'Run Tests in Sandbox',
+    sub: 'pytest with patched deps in isolated environment',
+    tool: 'run_tests_in_sandbox(requirements, test_path, app_module_dir, timeout_s)',
+    detail: {
+      desc: 'Runs the project\'s test suite against the patched requirements in a sandboxed subprocess. The FULL 4-line requirements string must be passed (not just the lmdeploy line) because the tests import fastapi and the app module, both of which must be installed.',
+      inputs: ['requirements: full mutated requirements.txt', 'test_path: tests/test_ssrf.py', 'app_module_dir: absolute path to app.py directory', 'timeout_s: 180'],
+      outputs: ['passed (bool)', 'test summary', 'duration'],
+      code: `# Sandbox installs:\n# pip install fastapi uvicorn pydantic lmdeploy==0.12.3\n# Then runs:\n# pytest tests/test_ssrf.py\n#   -v --tb=short`,
+      errorNote: 'If passed=false, agent halts and does NOT proceed to host patch.',
+    }
+  },
+  {
+    id: 'comment',
+    step: 'STEP 10',
+    icon: '💬',
+    type: 'git',
+    title: 'Post PR Comment',
+    sub: 'Attach test results + duration to the pull request',
+    tool: 'codecommit_post_pr_comment(repo, pr_id, body)',
+    detail: {
+      desc: 'Posts the test summary from STEP 8 as a comment on the pull request. This creates an audit trail linking the automated test results directly to the code change.',
+      inputs: ['repo: demo-app', 'pr_id: from STEP 7', 'body: test summary + duration'],
+      outputs: ['comment_id'],
+      code: `cc.post_comment_for_pull_request(\n  pullRequestId=pr_id,\n  repositoryName="demo-app",\n  beforeCommitId=dest_commit,\n  afterCommitId=source_commit,\n  content=test_summary\n)`,
+      errorNote: null,
+    }
+  },
+  {
+    id: 'decision_tests',
+    step: 'DECISION',
+    icon: '❓',
+    type: 'decision',
+    title: 'Tests Passed?',
+    sub: 'Gate: only proceed to hot-patch if all tests green',
+    tool: null,
+    detail: {
+      desc: 'This is a hard gate. The agent checks the passed field from the sandbox test result. If false, the pipeline halts and the feature branch is NOT deployed to the team. The live host is never patched when tests fail.',
+      inputs: ['passed (bool) from STEP 8'],
+      outputs: ['YES → proceed to STEP 10 (hot-patch live host)', 'NO → HALT + Teams alert'],
+      code: `if not sandbox_result["passed"]:\n    print("[HALT] Tests failed — aborting.")\n    return  # Never patch host`,
+      errorNote: 'Security invariant: a failing test means the patch may break functionality. Blocking the deploy protects production availability.',
+    }
+  },
+  {
+    id: 'halt_tests',
+    step: 'HALT',
+    icon: '🛑',
+    type: 'halt',
+    title: 'Halt — Tests Failed',
+    sub: 'Surface failure. Do NOT patch the live host.',
+    tool: null,
+    detail: {
+      desc: 'The pipeline terminates here. The agent surfaces the test failure output so a human can investigate. The live EC2 instance is NOT patched. The CodeCommit PR remains open for human review.',
+      inputs: ['Test failure output'],
+      outputs: ['Printed failure summary to stdout', 'PR left open for human review'],
+      code: `# Agent prints:\n"[HALT] Sandbox tests FAILED\n{test_output}\nNot proceeding to host patch."`,
+      errorNote: null,
+    }
+  },
+  {
+    id: 'teams_halt_tests',
+    step: 'NOTIFY',
+    icon: '💬',
+    type: 'teams',
+    title: 'MS Teams Alert — Sandbox Tests Failed',
+    sub: 'Notify appls team: patch blocked, manual investigation required',
+    tool: null,
+    detail: {
+      desc: 'RunwayZero posts an adaptive card to the application team\'s MS Teams channel. The message includes the CVE ID, which test cases failed, the full error output, and a link to the open PR for manual review. The team can action directly from Teams.',
+      inputs: ['CVE ID', 'Failed test output', 'PR web URL', 'Sandbox duration'],
+      outputs: ['Teams message delivered to appls channel', 'Adaptive card with action buttons: "View PR", "Re-trigger Pipeline"'],
+      code: `POST https://outlook.office.com/webhook/{webhook_id}\n{\n  "type": "message",\n  "attachments": [{\n    "contentType": "application/vnd.microsoft.card.adaptive",\n    "content": {\n      "type": "AdaptiveCard",\n      "body": [\n        { "type": "TextBlock",\n          "text": "🛑 RunwayZero HALTED",\n          "size": "Large", "weight": "Bolder",\n          "color": "Attention" },\n        { "type": "TextBlock",\n          "text": "CVE-2026-33626 — Sandbox tests FAILED" },\n        { "type": "FactSet", "facts": [\n          { "title": "Failed tests", "value": "{count}" },\n          { "title": "Action needed", "value": "Manual review" }\n        ]}\n      ],\n      "actions": [\n        { "type": "Action.OpenUrl",\n          "title": "View PR",\n          "url": "{pr_web_url}" },\n        { "type": "Action.OpenUrl",\n          "title": "View Test Logs",\n          "url": "{logs_url}" }\n      ]\n    }\n  }]\n}`,
+      errorNote: null,
+    }
+  },
+  {
+    id: 'merge',
+    step: 'STEP 11',
+    icon: '🔀',
+    type: 'git',
+    title: 'PR Open + Feature Branch CI/CD Triggered',
+    sub: 'PR left open for team. Feature branch push auto-triggers pipeline deployment.',
+    tool: null,
+    detail: {
+      desc: 'RunwayZero does not merge the PR. The PR is left open as a code review and merge vehicle for the application team to use when promoting to master. Simultaneously, the feature branch push from STEP 6 has already auto-triggered the CI/CD pipeline, which is now building and deploying the patched application to the feature branch environment.',
+      inputs: ['Feature branch: runwayzero/cve-2026-33626 (pushed in STEP 6)', 'PR open (created in STEP 7)', 'CI/CD pipeline auto-trigger on branch push'],
+      outputs: ['Feature branch environment being deployed', 'PR URL available for team', 'Build/deploy job running in pipeline'],
+      code: `# No RunwayZero action needed here.\n# The branch push in STEP 6 already\n# triggered the pipeline automatically.\n#\n# CI/CD watches: refs/heads/runwayzero/*\n# On push → build → deploy to feature env\n#\n# PR stays open:\n# runwayzero/cve-2026-33626 → master\n# Team will merge this when promoting.`,
+      errorNote: null,
+    }
+  },
+  {
+    id: 'hotpatch',
+    step: 'STEP 12',
+    icon: '🚀',
+    type: 'deploy',
+    title: 'Hot-Patch Live Host',
+    sub: 'pip install from pre-cached wheels + restart service via SSM',
+    tool: 'ssm_run_command(instance_id, commands, timeout_s)',
+    detail: {
+      desc: 'Runs two shell commands on the live EC2 instance via SSM Run Command: (1) pip install from pre-cached offline wheels to avoid network dependency, (2) systemctl restart to reload the service with the new package. Polls until completion (up to 120s).',
+      inputs: ['instance_id: from STEP 2', 'commands: pip install + systemctl restart', 'timeout_s: 120'],
+      outputs: ['status (Success/Failed)', 'exit_code', 'stdout_tail', 'stderr_tail', 'duration_s'],
+      code: `commands = [\n  "/opt/runwayzero/venv/bin/pip install"\n  " --no-index"\n  " --find-links /var/cache/runwayzero/wheels"\n  " -r /opt/runwayzero/requirements-fixed.txt",\n\n  "systemctl restart runwayzero-demo"\n]`,
+      errorNote: 'retryable: true. Uses offline wheel cache so no network needed on the host.',
+    }
+  },
+  {
+    id: 'health',
+    step: 'STEP 13',
+    icon: '💓',
+    type: 'verify',
+    title: 'Verify Service Healthy',
+    sub: 'GET /healthz — confirm service came up after restart',
+    tool: 'verify_service_healthy(url, timeout_s)',
+    detail: {
+      desc: 'Performs an HTTP GET to the /healthz endpoint. Must return 2xx within 10 seconds. This check must pass before the exploit verification — a dead service would silently appear as "exploit blocked" which would be a misleading false-positive.',
+      inputs: ['url: http://<host>/healthz', 'timeout_s: 10'],
+      outputs: ['healthy (bool)', 'status_code', 'response_ms'],
+      code: `GET http://10.0.0.1:8080/healthz\n# Expects: 200 OK`,
+      errorNote: 'retryable: true. If healthy=false, pipeline HALTS — never check exploit on a dead service.',
+    }
+  },
+  {
+    id: 'decision_health',
+    step: 'DECISION',
+    icon: '❓',
+    type: 'decision',
+    title: 'Service Healthy?',
+    sub: 'Gate: must be alive before checking exploit',
+    tool: null,
+    detail: {
+      desc: 'Critical safety gate. A service that is down cannot receive HTTP requests, so an exploit probe would fail with a connection error and the agent would incorrectly classify that as "blocked". This gate prevents false-positive security verdicts.',
+      inputs: ['healthy (bool) from STEP 12'],
+      outputs: ['YES → STEP 13 (exploit check)', 'NO → HALT'],
+      code: `if not health_result["healthy"]:\n    print("[HALT] Service not healthy!")\n    return`,
+      errorNote: null,
+    }
+  },
+  {
+    id: 'halt_health',
+    step: 'HALT',
+    icon: '🛑',
+    type: 'halt',
+    title: 'Halt — Service Down',
+    sub: 'Service did not come up. Exploit check would be misleading.',
+    tool: null,
+    detail: {
+      desc: 'The pipeline halts here. The service failed to restart after the patch, indicating a possible compatibility issue or runtime error. A human needs to investigate. The exploit-blocked verdict is explicitly NOT reported.',
+      inputs: ['health check failure'],
+      outputs: ['Printed halt message', 'No exploit verdict emitted'],
+      code: `# Agent prints:\n"[HALT] Service unhealthy after restart.\nNot checking exploit — verdict\nwould be misleading."`,
+      errorNote: null,
+    }
+  },
+  {
+    id: 'teams_halt_health',
+    step: 'NOTIFY',
+    icon: '💬',
+    type: 'teams',
+    title: 'MS Teams Alert — Service Down After Patch',
+    sub: 'Notify appls team: service failed to restart, urgent investigation needed',
+    tool: null,
+    detail: {
+      desc: 'RunwayZero posts an urgent adaptive card to the application team\'s MS Teams channel. This is flagged as high priority since the service is actively down on the live EC2 instance after the hot-patch. The team receives instance details, SSM command output, and direct links to investigate.',
+      inputs: ['CVE ID', 'instance_id', 'SSM command stdout/stderr from STEP 11', 'Health check status code'],
+      outputs: ['High-priority Teams alert to appls channel', 'Adaptive card with: instance ID, restart logs, action buttons'],
+      code: `POST https://outlook.office.com/webhook/{webhook_id}\n{\n  "attachments": [{\n    "content": {\n      "body": [\n        { "text": "🚨 URGENT: Service Down",\n          "color": "Attention" },\n        { "text": "CVE-2026-33626 patch applied but\n          service failed to restart." },\n        { "type": "FactSet", "facts": [\n          { "title": "Instance",\n            "value": "{instance_id}" },\n          { "title": "Health check",\n            "value": "FAILED ({status_code})" },\n          { "title": "Action needed",\n            "value": "URGENT — service is down" }\n        ]}\n      ],\n      "actions": [\n        { "title": "View SSM Logs",\n          "url": "{ssm_logs_url}" },\n        { "title": "SSH to Instance",\n          "url": "{session_manager_url}" }\n      ]\n    }\n  }]\n}`,
+      errorNote: null,
+    }
+  },
+  {
+    id: 'exploit',
+    step: 'STEP 14',
+    icon: '🔒',
+    type: 'verify',
+    title: 'Verify Exploit Blocked',
+    sub: 'POST SSRF payload to /chat — confirm IAM creds NOT returned',
+    tool: 'verify_exploit_blocked(url, payload)',
+    detail: {
+      desc: 'Posts the SSRF probe to the /chat endpoint. The payload is an image_url pointing to the IMDS endpoint for the EC2\'s IAM role credentials. Strict contract: blocked = true only when server returns 4xx/5xx. A 2xx response is inconclusive/not-blocked.',
+      inputs: ['url: http://<host>/chat', 'payload: { "image_url": "http://169.254.169.254/latest/meta-data/iam/security-credentials/<role_name>" }'],
+      outputs: ['blocked (bool)', 'status_code', 'response_body_preview', 'note'],
+      code: `POST http://10.0.0.1:8080/chat\n{\n  "image_url": "http://169.254.169.254/\n    latest/meta-data/iam/\n    security-credentials/<role_name>"\n}\n# Expects: 4xx (blocked)`,
+      errorNote: 'retryable: true. Uses full IMDS path with role_name — bare /iam/security-credentials/ only returns role names, not actual credentials.',
+    }
+  },
+  {
+    id: 'summary',
+    step: 'STEP 15',
+    icon: '🏁',
+    type: 'success',
+    title: 'Print Final Summary',
+    sub: 'PR link, instance patched, blocked verdict, and note',
+    tool: null,
+    detail: {
+      desc: 'The agent prints a concise final summary to stdout covering all key outcomes. This is the terminal state of a successful run.',
+      inputs: ['All prior step outputs'],
+      outputs: ['PR id + web URL', 'instance_id patched', 'blocked verdict', 'note from verify_exploit_blocked'],
+      code: `# Agent prints:\n"✅ RunwayZero complete\n\nPR #42: https://console.aws.amazon.com/...\nInstance patched: i-0abc123\nExploit status: BLOCKED\nNote: blocked — server rejected with status 400"`,
+      errorNote: null,
+    }
+  },
+  // ── NEW: Automated Deployment & Team Handoff ───────────────────────────────
+  {
+    id: 'auto_deploy',
+    step: 'STEP 16',
+    icon: '🤖',
+    type: 'cd',
+    title: 'Feature Branch Deployment Ready',
+    sub: 'RunwayZero confirms CI/CD pipeline has deployed the feature branch environment',
+    tool: null,
+    detail: {
+      desc: 'RunwayZero polls or listens for the CI/CD pipeline completion event to confirm the feature branch environment is live. The pipeline was triggered automatically by the feature branch push in STEP 6. Once confirmed, the feature env URL is captured and passed to the team notification.',
+      inputs: ['Pipeline job ID (from auto-trigger in STEP 10)', 'Feature branch: runwayzero/cve-2026-33626'],
+      outputs: ['Feature env URL (e.g. https://runwayzero-cve-2026-33626.internal)', 'Deployment status: SUCCESS', 'Build job URL'],
+      code: `# Poll CodePipeline for completion:\nwhile True:\n  state = codepipeline.get_pipeline_state(\n    name="feature-deploy-pipeline"\n  )\n  stage = state["stageStates"][-1]\n  if stage["latestExecution"]["status"] \\\n     == "Succeeded":\n    feature_env_url = stage["outputs"]["env_url"]\n    break\n  time.sleep(10)`,
+      errorNote: 'If deployment fails, halt and send Teams alert to appls team before they are asked to test.',
+    }
+  },
+  {
+    id: 'notify_team',
+    step: 'STEP 17',
+    icon: '📣',
+    type: 'teams',
+    title: 'MS Teams — Notify Appls Team',
+    sub: 'Feature branch deployed. Please test & promote to UAT then master when ready.',
+    tool: null,
+    detail: {
+      desc: 'RunwayZero sends an MS Teams adaptive card to the application team channel. The message contains everything the team needs: the feature branch env URL to test against, a summary of what was patched and why, the sandbox test results already run, and the exploit-blocked proof. The team does not need to set up anything — they just open the URL and test.',
+      inputs: ['Feature env URL from STEP 15', 'CVE summary', 'PR URL (for when they are ready to merge to master)', 'Sandbox test results', 'Exploit blocked verdict'],
+      outputs: ['MS Teams adaptive card sent to appls channel', 'Action buttons: "Open Feature Env", "View PR", "View Test Evidence"'],
+      code: `POST https://outlook.office.com/webhook/{webhook_id}\n{\n  "attachments": [{\n    "contentType": "application/vnd.microsoft.card.adaptive",\n    "content": {\n      "body": [\n        { "text": "🤖 RunwayZero — Action Required",\n          "size": "Large", "weight": "Bolder" },\n        { "text": "A security patch for CVE-2026-33626\n          has been deployed to your feature\n          branch environment for testing." },\n        { "type": "FactSet", "facts": [\n          { "title": "Branch",\n            "value": "runwayzero/cve-2026-33626" },\n          { "title": "Fix",\n            "value": "lmdeploy 0.12.2 → 0.12.3" },\n          { "title": "Sandbox tests",\n            "value": "✅ PASSED" },\n          { "title": "Exploit probe",\n            "value": "🔒 BLOCKED" },\n          { "title": "Next step",\n            "value": "Test → promote to UAT → master" }\n        ]}\n      ],\n      "actions": [\n        { "title": "🌐 Open Feature Env",\n          "url": "{feature_env_url}" },\n        { "title": "🔀 View PR",\n          "url": "{pr_web_url}" },\n        { "title": "📋 View Test Evidence",\n          "url": "{pr_comment_url}" }\n      ]\n    }\n  }]\n}`,
+      errorNote: null,
+    }
+  },
+  {
+    id: 'team_review',
+    step: 'STEP 18',
+    icon: '👩‍💻',
+    type: 'human',
+    title: 'Team Tests Feature Branch Deployment',
+    sub: 'Appls team opens feature env URL and validates application functionality',
+    tool: null,
+    detail: {
+      desc: 'The application team clicks the feature env URL from the Teams notification and performs functional testing on the live feature branch deployment. This is their normal application testing — checking that the app behaves correctly end-to-end with the patched library. RunwayZero has already done the security validation; the team focuses purely on application functionality. No branch setup, no package installs, no pipeline knowledge needed.',
+      inputs: ['Feature env URL from Teams notification', 'PR URL for code reference'],
+      outputs: ['Team decision: approve or reject promotion to UAT'],
+      code: `# Team actions:\n# 1. Click feature env URL from Teams card\n# 2. Test key application user journeys\n# 3. Verify /chat endpoint works correctly\n# 4. Confirm no functional regressions\n# 5. Reply "Approved" in Teams card\n#    OR merge PR to start UAT promotion`,
+      errorNote: 'If a regression is found, team rejects and RunwayZero receives the rejection, halts, and sends a Teams alert acknowledging the issue.',
+    }
+  },
+  {
+    id: 'decision_review',
+    step: 'DECISION',
+    icon: '❓',
+    type: 'decision',
+    title: 'Team Approves?',
+    sub: 'Human gate: appls team confirms application is working before promoting',
+    tool: null,
+    detail: {
+      desc: 'The application team makes the call after testing the feature branch deployment. Their approval is the trigger for RunwayZero to hand off the branch for UAT promotion. The team retains full control over the promotion timeline.',
+      inputs: ['Team approval / rejection from STEP 17'],
+      outputs: ['YES → team promotes feature branch to UAT', 'NO → halt + Teams alert'],
+      code: `# Approval captured via:\n# - Teams adaptive card reply / button click\n# - PR approval in CodeCommit/GitHub\n# - Teams @mention or emoji reaction`,
+      errorNote: null,
+    }
+  },
+  {
+    id: 'halt_review',
+    step: 'HALT',
+    icon: '🛑',
+    type: 'halt',
+    title: 'Halt — Team Rejected',
+    sub: 'Regression found. Open issue and restart remediation loop.',
+    tool: null,
+    detail: {
+      desc: 'The team found a functional regression in the feature environment. RunwayZero opens a new issue or ticket with the team\'s feedback, and a fresh remediation cycle begins. The production environment is protected — nothing was promoted.',
+      inputs: ['Team rejection reason'],
+      outputs: ['New issue / ticket opened', 'Alert to RunwayZero operator', 'Feature env kept alive for debugging'],
+      code: `# RunwayZero opens a ticket:\n"Promotion blocked by appls team.\nReason: {team_feedback}\nCVE: CVE-2026-33626\nFeature env preserved at:\nhttps://feature-cve.internal\nAssigned to: runwayzero-operator"`,
+      errorNote: null,
+    }
+  },
+  {
+    id: 'teams_halt_review',
+    step: 'NOTIFY',
+    icon: '💬',
+    type: 'teams',
+    title: 'MS Teams Alert — Promotion Rejected',
+    sub: 'Confirm rejection receipt, share feedback with RunwayZero operator, keep env alive',
+    tool: null,
+    detail: {
+      desc: 'RunwayZero acknowledges the team\'s rejection in the Teams channel and escalates to the RunwayZero operator. The feature environment is kept alive so both the team and operator can continue debugging. A new remediation issue is auto-created and linked in the card.',
+      inputs: ['CVE ID', 'Team rejection reason / comments', 'Feature env URL', 'New issue / ticket ID'],
+      outputs: ['Teams message to appls channel confirming rejection received', 'Escalation ping to RunwayZero operator', 'Links to: feature env, new issue, original PR'],
+      code: `POST https://outlook.office.com/webhook/{webhook_id}\n{\n  "attachments": [{\n    "content": {\n      "body": [\n        { "text": "⚠️ Promotion Rejected",\n          "color": "Warning" },\n        { "text": "CVE-2026-33626 — team rejected\n          promotion from feature env." },\n        { "type": "FactSet", "facts": [\n          { "title": "Reason",\n            "value": "{team_feedback}" },\n          { "title": "Feature env",\n            "value": "Kept alive for debugging" },\n          { "title": "New issue",\n            "value": "{issue_url}" }\n        ]}\n      ],\n      "actions": [\n        { "title": "View Feature Env",\n          "url": "{feature_env_url}" },\n        { "title": "View Issue",\n          "url": "{issue_url}" },\n        { "title": "Re-trigger Pipeline",\n          "url": "{pipeline_trigger_url}" }\n      ]\n    }\n  }]\n}`,
+      errorNote: null,
+    }
+  },
+  {
+    id: 'promote_staging',
+    step: 'STEP 19',
+    icon: '👩‍💻',
+    type: 'human',
+    title: 'Team Promotes Feature Branch → UAT',
+    sub: 'Appls team pushes the fix branch to UAT — pipeline deploys automatically',
+    tool: null,
+    detail: {
+      desc: 'The application team takes ownership and promotes the feature branch to UAT using their standard process. This could be a branch merge, a pipeline trigger, or a promotion command — whatever their existing workflow is. The CI/CD pipeline auto-deploys to UAT. The team then runs UAT testing as normal.',
+      inputs: ['Feature branch: runwayzero/cve-2026-33626 (team-approved)', 'UAT branch / environment config'],
+      outputs: ['UAT deployment live', 'UAT pipeline triggered', 'UAT test results (team-owned)'],
+      code: `# Team-driven — examples:\n\n# Option A: merge feature → uat branch\ngit checkout uat\ngit merge runwayzero/cve-2026-33626\ngit push origin uat\n# → CI/CD deploys to UAT automatically\n\n# Option B: use existing promotion tool\npromote-tool --from=feature --to=uat \\\n  --branch=runwayzero/cve-2026-33626`,
+      errorNote: null,
+    }
+  },
+  {
+    id: 'promote_uat',
+    step: 'STEP 20',
+    icon: '👩‍💻',
+    type: 'human',
+    title: 'Team Promotes UAT → Master',
+    sub: 'After UAT sign-off, appls team merges PR into master — production deployment',
+    tool: null,
+    detail: {
+      desc: 'After UAT testing passes, the application team uses the open PR (created by RunwayZero in STEP 7) to merge the fix branch into master. The production CI/CD pipeline triggers automatically on the master branch merge. This is the final team action — no RunwayZero involvement at this stage.',
+      inputs: ['UAT sign-off', 'Open PR: runwayzero/cve-2026-33626 → master (from STEP 7)', 'Master / production pipeline config'],
+      outputs: ['Master branch updated', 'Production deployment triggered', 'PR merged and closed'],
+      code: `# Team merges the open PR in CodeCommit:\n# PR: runwayzero/cve-2026-33626 → master\n#\n# Option A: via AWS Console / PR UI\n#\n# Option B: CLI\ncc.merge_pull_request_by_fast_forward(\n  pullRequestId="{pr_id from STEP 7}",\n  repositoryName="demo-app"\n)\n# → CI/CD deploys to production automatically`,
+      errorNote: null,
+    }
+  },
+  {
+    id: 'final',
+    step: 'COMPLETE',
+    icon: '🎉',
+    type: 'success',
+    title: 'End-to-End Remediation Complete',
+    sub: 'CVE patched in all envs. RunwayZero handled security; team handled promotion.',
+    tool: null,
+    detail: {
+      desc: 'The full pipeline is complete. RunwayZero owned everything up to the feature branch deployment and Teams notification — research, fix, tests, PR, hot-patch, and exploit verification. The application team owned promotion from feature → UAT → master. Their only overhead was testing the feature branch and approving promotion.',
+      inputs: ['All prior steps complete'],
+      outputs: ['CVE closed in all environments', 'Full audit trail: PR + test results + exploit probe + Teams notifications', 'Team time saved: no branch setup, no pip installs, no pipeline coordination'],
+      code: `# Final audit record:\n{\n  "cve_id": "CVE-2026-33626",\n  "status": "remediated",\n  "fix": "lmdeploy 0.12.2 → 0.12.3",\n  "runwayzero_actions": [\n    "research", "scan", "patch",\n    "tests", "PR", "hot-patch",\n    "exploit-verify", "feature-deploy",\n    "teams-notify"\n  ],\n  "team_actions": [\n    "feature-env testing",\n    "promote to UAT",\n    "promote to master"\n  ],\n  "human_touchpoints": 1\n}`,
+      errorNote: null,
+    }
+  },
+];
+
+// ── Build flow DOM ─────────────────────────────────────────────────────────────
+const flow = document.getElementById('flow');
+const detail = document.getElementById('detail-panel');
+
+let activeId = null;
+
+function makeArrow(colorClass = '') {
+  const wrap = document.createElement('div');
+  wrap.className = 'arrow-row';
+  const line = document.createElement('div');
+  line.className = `connector ${colorClass}`;
+  line.style.height = '24px';
+  const tip = document.createElement('div');
+  tip.className = `arrow-tip ${colorClass}`;
+  wrap.appendChild(line);
+  wrap.appendChild(tip);
+  return wrap;
+}
+
+function makeNode(n) {
+  const el = document.createElement('div');
+  el.className = `node ${n.type}`;
+  el.dataset.id = n.id;
+
+  const hdr = document.createElement('div');
+  hdr.className = 'node-header';
+
+  const badge = document.createElement('span');
+  badge.className = 'step-badge';
+  badge.textContent = n.step;
+
+  const icon = document.createElement('span');
+  icon.className = 'node-icon';
+  icon.textContent = n.icon;
+
+  const title = document.createElement('span');
+  title.className = 'node-title';
+  title.textContent = n.title;
+
+  hdr.appendChild(badge);
+  hdr.appendChild(icon);
+  hdr.appendChild(title);
+  el.appendChild(hdr);
+
+  if (n.sub) {
+    const sub = document.createElement('div');
+    sub.className = 'node-sub';
+    sub.textContent = n.sub;
+    el.appendChild(sub);
+  }
+
+  if (n.tool) {
+    const tag = document.createElement('div');
+    tag.className = 'tool-tag';
+    tag.textContent = n.tool;
+    el.appendChild(tag);
+  }
+
+  el.addEventListener('click', () => activateNode(n.id));
+  return el;
+}
+
+function pills(items, type) {
+  return items.map(i => `<span class="pill ${type}">${i}</span>`).join('');
+}
+
+function activateNode(id) {
+  document.querySelectorAll('.node').forEach(el => el.classList.remove('active'));
+  const el = document.querySelector(`.node[data-id="${id}"]`);
+  if (el) el.classList.add('active');
+  activeId = id;
+
+  const n = nodes.find(x => x.id === id);
+  if (!n) return;
+  const d = n.detail;
+
+  let html = `
+    <div class="detail-node-title">${n.icon} ${n.title}</div>
+    <span class="detail-step">${n.step}</span>
+    <p class="detail-desc">${d.desc}</p>
+  `;
+
+  if (d.inputs && d.inputs.length) {
+    html += `<div class="detail-section"><h4>Inputs</h4>${pills(d.inputs, 'input')}</div>`;
+  }
+  if (d.outputs && d.outputs.length) {
+    html += `<div class="detail-section"><h4>Outputs</h4>${pills(d.outputs, 'output')}</div>`;
+  }
+  if (d.code) {
+    html += `<div class="detail-section"><h4>Tool / Code</h4><div class="code-block">${escapeHtml(d.code)}</div></div>`;
+  }
+  if (d.errorNote) {
+    const cls = d.errorNote.toLowerCase().includes('halt') ? 'halts-note' : 'detail-desc';
+    html += `<div class="detail-section"><h4>Error Handling</h4><div class="${cls}">${d.errorNote}</div></div>`;
+  }
+
+  detail.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Render the flow ────────────────────────────────────────────────────────────
+// We define the sequence including branch forks manually
+const mainSequence = [
+  'trigger', 'genspark', 'ssm_scan', 'code_scan', 'impact', 'read_req', 'mutate', 'push', 'pr', 'test', 'comment', 'decision_tests',
+];
+
+// Render up to decision_tests as straight line
+mainSequence.forEach((id, i) => {
+  const n = nodes.find(x => x.id === id);
+  flow.appendChild(makeNode(n));
+  if (id !== 'decision_tests') {
+    flow.appendChild(makeArrow());
+  }
+});
+
+// Decision fork: decision_tests → halt_tests (NO) | hotpatch (YES)
+const forkTests = document.createElement('div');
+forkTests.style.cssText = 'width:100%;display:flex;justify-content:center;margin-top:0;';
+
+const forkInner = document.createElement('div');
+forkInner.style.cssText = 'display:flex;gap:48px;align-items:flex-start;margin-top:4px;';
+
+// NO branch
+const noBranch = document.createElement('div');
+noBranch.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
+const noLabel = document.createElement('div');
+noLabel.innerHTML = '<div style="background:#f85149;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;margin:6px 0 4px;">NO ✗</div>';
+noBranch.appendChild(noLabel);
+noBranch.appendChild(makeArrow('no'));
+noBranch.appendChild(makeNode(nodes.find(x => x.id === 'halt_tests')));
+noBranch.appendChild(makeArrow());
+noBranch.appendChild(makeNode(nodes.find(x => x.id === 'teams_halt_tests')));
+
+// YES branch — go straight to hotpatch (no merge by RunwayZero)
+const yesBranch = document.createElement('div');
+yesBranch.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
+const yesLabel = document.createElement('div');
+yesLabel.innerHTML = '<div style="background:#3fb950;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;margin:6px 0 4px;">YES ✓</div>';
+yesBranch.appendChild(yesLabel);
+yesBranch.appendChild(makeArrow('yes'));
+yesBranch.appendChild(makeNode(nodes.find(x => x.id === 'hotpatch')));
+
+forkInner.appendChild(noBranch);
+forkInner.appendChild(yesBranch);
+forkTests.appendChild(forkInner);
+flow.appendChild(forkTests);
+
+// Continue YES path: health check → decision
+const continueWrap = document.createElement('div');
+continueWrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;width:100%;';
+continueWrap.appendChild(makeArrow());
+continueWrap.appendChild(makeNode(nodes.find(x => x.id === 'health')));
+continueWrap.appendChild(makeArrow());
+continueWrap.appendChild(makeNode(nodes.find(x => x.id === 'decision_health')));
+flow.appendChild(continueWrap);
+
+// Decision fork: decision_health
+const forkHealth = document.createElement('div');
+forkHealth.style.cssText = 'width:100%;display:flex;justify-content:center;';
+const forkHealthInner = document.createElement('div');
+forkHealthInner.style.cssText = 'display:flex;gap:48px;align-items:flex-start;margin-top:4px;';
+
+const noHealth = document.createElement('div');
+noHealth.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
+const noHealthLabel = document.createElement('div');
+noHealthLabel.innerHTML = '<div style="background:#f85149;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;margin:6px 0 4px;">NO ✗</div>';
+noHealth.appendChild(noHealthLabel);
+noHealth.appendChild(makeArrow('no'));
+noHealth.appendChild(makeNode(nodes.find(x => x.id === 'halt_health')));
+noHealth.appendChild(makeArrow());
+noHealth.appendChild(makeNode(nodes.find(x => x.id === 'teams_halt_health')));
+
+const yesHealth = document.createElement('div');
+yesHealth.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
+const yesHealthLabel = document.createElement('div');
+yesHealthLabel.innerHTML = '<div style="background:#3fb950;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;margin:6px 0 4px;">YES ✓</div>';
+yesHealth.appendChild(yesHealthLabel);
+yesHealth.appendChild(makeArrow('yes'));
+yesHealth.appendChild(makeNode(nodes.find(x => x.id === 'exploit')));
+
+forkHealthInner.appendChild(noHealth);
+forkHealthInner.appendChild(yesHealth);
+forkHealth.appendChild(forkHealthInner);
+flow.appendChild(forkHealth);
+
+// Final summary + deployment pipeline handoff
+const finalWrap = document.createElement('div');
+finalWrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;width:100%;';
+finalWrap.appendChild(makeArrow('yes'));
+finalWrap.appendChild(makeNode(nodes.find(x => x.id === 'summary')));
+
+// Section divider
+const divider1 = document.createElement('div');
+divider1.className = 'section-divider';
+divider1.style.cssText = 'width:460px;margin:16px 0 0;';
+divider1.innerHTML = '<hr style="flex:1;border:none;border-top:1px dashed #30363d;"><span style="font-size:10px;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:0.1em;white-space:nowrap;padding:0 12px;">feature branch pipeline & team handoff</span><hr style="flex:1;border:none;border-top:1px dashed #30363d;">';
+finalWrap.appendChild(divider1);
+
+finalWrap.appendChild(makeArrow());
+finalWrap.appendChild(makeNode(nodes.find(x => x.id === 'merge')));   // PR open + CI/CD triggered
+finalWrap.appendChild(makeArrow());
+finalWrap.appendChild(makeNode(nodes.find(x => x.id === 'auto_deploy')));  // confirm deploy ready
+finalWrap.appendChild(makeArrow());
+finalWrap.appendChild(makeNode(nodes.find(x => x.id === 'notify_team')));
+finalWrap.appendChild(makeArrow());
+finalWrap.appendChild(makeNode(nodes.find(x => x.id === 'team_review')));
+finalWrap.appendChild(makeArrow());
+finalWrap.appendChild(makeNode(nodes.find(x => x.id === 'decision_review')));
+flow.appendChild(finalWrap);
+
+// Decision fork: decision_review
+const forkReview = document.createElement('div');
+forkReview.style.cssText = 'width:100%;display:flex;justify-content:center;';
+const forkReviewInner = document.createElement('div');
+forkReviewInner.style.cssText = 'display:flex;gap:48px;align-items:flex-start;margin-top:4px;';
+
+const noReview = document.createElement('div');
+noReview.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
+noReview.innerHTML = '<div style="background:#f85149;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;margin:6px 0 4px;">NO ✗</div>';
+noReview.appendChild(makeArrow('no'));
+noReview.appendChild(makeNode(nodes.find(x => x.id === 'halt_review')));
+noReview.appendChild(makeArrow());
+noReview.appendChild(makeNode(nodes.find(x => x.id === 'teams_halt_review')));
+
+const yesReview = document.createElement('div');
+yesReview.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
+yesReview.innerHTML = '<div style="background:#3fb950;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;margin:6px 0 4px;">YES ✓</div>';
+yesReview.appendChild(makeArrow('yes'));
+yesReview.appendChild(makeNode(nodes.find(x => x.id === 'promote_staging')));
+
+forkReviewInner.appendChild(noReview);
+forkReviewInner.appendChild(yesReview);
+forkReview.appendChild(forkReviewInner);
+flow.appendChild(forkReview);
+
+// Promotion chain
+const promoteWrap = document.createElement('div');
+promoteWrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;width:100%;margin-bottom:48px;';
+promoteWrap.appendChild(makeArrow('yes'));
+promoteWrap.appendChild(makeNode(nodes.find(x => x.id === 'promote_uat')));
+promoteWrap.appendChild(makeArrow('yes'));
+promoteWrap.appendChild(makeNode(nodes.find(x => x.id === 'final')));
+flow.appendChild(promoteWrap);
+
+// Auto-open first node
+activateNode('trigger');
+</script>
+</body>
+</html>
