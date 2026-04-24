@@ -4,20 +4,20 @@ version = "0.1.0"
 description = "RunwayZero — AI-Powered Vulnerability Impact Agent (hackathon demo)"
 requires-python = ">=3.11"
 dependencies = [
-    "anthropic>=0.40.0",
-    "boto3>=1.34.0",
-    "requests>=2.31.0",
-    "anyio>=4.0.0",
+    "anthropic==0.97.0",
+    "boto3==1.42.61",
+    "requests==2.32.5",
+    "anyio==4.13.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
-    "moto>=5.0.0",
-    "responses>=0.25.0",
-    "fastapi>=0.115.0",
-    "httpx>=0.27.0",
+    "pytest==9.0.3",
+    "pytest-asyncio==1.3.0",
+    "moto==5.1.22",
+    "responses==0.26.0",
+    "fastapi==0.136.1",
+    "httpx==0.28.1",
 ]
 
 [project.scripts]
