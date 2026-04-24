@@ -1,0 +1,22 @@
+# Environment
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Cache (keep structure, ignore contents except examples)
+cache/*
+!cache/.gitkeep
+!cache/genspark_cve-2026-33626.json
+
+# Build
+dist/
+*.egg-info/

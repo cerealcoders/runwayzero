@@ -1,0 +1,25 @@
+[project]
+name = "runwayzero"
+version = "0.1.0"
+description = "AI-Powered Vulnerability Impact Agent"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic",
+    "boto3",
+    "requests",
+    "python-dotenv",
+    "mcp",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "moto",
+    "ruff",
+]
+
+[project.scripts]
+runwayzero = "agent.main:cli"
+
+[tool.ruff]
+line-length = 120
